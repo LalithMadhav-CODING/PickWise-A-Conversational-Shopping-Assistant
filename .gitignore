@@ -1,0 +1,40 @@
+# Secrets
+.env
+.env.*
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Course archives — re-downloadable, and duplicates of the unpacked dirs
+*.zip
+
+# Media — screen recordings, not source
+*.mov
+*.mp4
+
+# Build / deps
+node_modules/
+
+# Data + model artifacts — rebuilt by the notebook via load_dataset
+/data/
+/models/
+*.npy
+*.faiss
+*.index
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+*.swp
+
+# Local-only agent instructions — not shared with collaborators
+AGENTS.md
