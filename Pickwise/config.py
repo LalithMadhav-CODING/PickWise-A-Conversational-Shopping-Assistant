@@ -29,6 +29,12 @@ REASONING = True          # keeps Qwen3's thinking out of the answer (see plan: 
 # --- RAG (same models as the Module 3 lab) --------------------------------------------------------
 EMBED_MODEL = "BAAI/bge-small-en-v1.5"
 RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+DEPTH = 100               # every ranking is cut at 100 products (MRR is computed over this depth)
+RRF_K = 60                # Reciprocal Rank Fusion constant (Module 3 lab default)
+RRF_WEIGHTS = (1.0, 1.0)  # (BM25, dense) weights in the fusion; equal = the lab's plain RRF (tuned on dev)
+RERANK_TOP_N = 50         # hybrid shortlist the cross-encoder re-scores (tuned on dev)
+CHUNK_SIZE = 300          # only for the chunking comparison; the main index is one document per product
+CHUNK_OVERLAP = 50
 
 # --- Harness --------------------------------------------------------------------------------------
 RECURSION_LIMIT = 25

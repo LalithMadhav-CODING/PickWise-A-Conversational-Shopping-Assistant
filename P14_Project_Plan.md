@@ -117,7 +117,7 @@ Memory:  checkpointer (this chat)  +  Store (shopper preferences)
 | Purpose | Model | Notes |
 |---|---|---|
 | Agents (tool calling, structured output) | **qwen3:4b** | primary; `qwen3:1.7b` fallback. **Run with `ChatOllama(reasoning=True)`** — with `reasoning=False` reasoning leaks into the answer (see Risks) |
-| Embeddings | `BAAI/bge-small-en-v1.5` or `all-MiniLM-L6-v2` | 384-dim, CPU-friendly |
+| Embeddings | `BAAI/bge-small-en-v1.5` | 384-dim, CPU-friendly; with the bge query instruction (slightly better than without on dev) |
 | Re-ranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` | cross-encoder, top of the hybrid pipeline |
 | Optional product embedder | `hyp1231/blair-roberta-base` | stretch comparison |
 | Optional LoRA need analyst | `Qwen2.5-0.5B` | stretch; 2–5k C4 queries outside test subset |
@@ -149,24 +149,25 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 - **Done when** · reproducible catalogue; no `ori_review` in the index
 
 ### Phase 2 — Retrieval (RAG)  →  *Module 3*
-- [ ] **One document per item** (full `metadata` text, title first) — median item is 32 words, so no chunk→item merging is needed _(decided 2026-10-26, review issue #2)_
-- [ ] Comparison row: Module 3 chunking (`RecursiveCharacterTextSplitter`, 300 / 50, contextual headers) with max-score-per-item aggregation
-- [ ] **Dense** — FAISS + embeddings
-- [ ] **Sparse** — BM25
-- [ ] **Hybrid** — Reciprocal Rank Fusion
-- [ ] **Re-rank** — cross-encoder over hybrid shortlist
-- [ ] Evaluate: **Recall@10, MRR, nDCG@10** vs gold `item_id`
-- [ ] Compare: BM25 raw · dense raw · hybrid · hybrid+rerank
-- **Builds on** · Module 3 · RAG_Pipeline_Lab
-- **Done when** · results table for all 4 retrieval variants
+- [x] **One document per item** (full `metadata` text, title first) — median item is 32 words, so no chunk→item merging is needed _(decided 2026-10-26, review issue #2)_
+- [x] Comparison row: Module 3 chunking (`RecursiveCharacterTextSplitter`, 300 / 50, contextual headers) with max-score-per-item aggregation — same quality, 2.5× the index (83k chunks)
+- [x] **Dense** — FAISS + `bge-small-en-v1.5` (cosine, bge query instruction), embeddings cached
+- [x] **Sparse** — BM25 (`rank_bm25` formula, vectorised; identical scores, ~600× faster)
+- [x] **Hybrid** — Reciprocal Rank Fusion (k = 60, equal weights = lab default; weights tuned on dev, no reliable gain)
+- [x] **Re-rank** — cross-encoder over the hybrid top 50
+- [x] Evaluate: **Recall@10, MRR, nDCG@10** vs gold `item_id` (+ Recall@50/100, paired bootstrap CIs)
+- [x] Compare: BM25 raw · dense raw · hybrid · hybrid+rerank — **test Recall@10 0.10 · 0.41 · 0.32 · 0.41**
+- **Builds on** · Module 3 · RAG_Pipeline_Lab; Module 4 · Agentic_app (`rag.py`)
+- **Done when** · results table for all 4 retrieval variants ✅ 2026-10-26
 
 ### Phase 3 — Need Analyst  →  *Module 2*
-- [ ] Structured query rewriting: long request → `{product_type, must_haves, category}`
-- [ ] Schema-constrained output (`with_structured_output`) with `reasoning=False`
-- [ ] Confirm on dev: `reasoning=False` vs `True` for the need analyst (retrieval metrics + latency); keep `False` unless `True` is clearly better
-- [ ] Measure: does rewriting beat searching with the raw request?
-- **Builds on** · Module 2 · Structured_Generation_Lab (constrained decoding, tool calling)
-- **Done when** · retrieval metrics with vs. without rewriting
+- [x] Structured query rewriting: long request → `{product_type, must_haves, category}`; category = `Literal` over the 31 catalogue categories, with a guide to what each name holds
+- [x] Schema-constrained output (`with_structured_output`) with `reasoning=False`; replies cached (`data/needs/`); 0 failures on 1,000 requests, ~1 s each
+- [x] Confirm on dev: `reasoning=False` vs `True` — **confirmed `False`**: 1.1 s vs 30.7 s per request (28×), no retrieval gain (paired bootstrap Recall@10 −0.010 [−0.045, +0.025], MRR +0.016 [−0.009, +0.041]); reasoning on picks the category better (52.5% vs 43%) but category isn't used as a filter
+- [x] Measure: does rewriting beat searching with the raw request? **Yes for the full pipeline** — hybrid+rerank on *rewrite + request*: test Recall@10 0.45 / MRR 0.28 vs 0.41 / 0.23 raw; beats the best baseline (dense raw) with paired-bootstrap 95% CIs excluding 0
+- [x] Category as a hard filter **rejected**: 43% dev category accuracy → recall halves. `category` stays an optional tool argument
+- **Builds on** · Module 2 · Structured_Generation_Lab (constrained decoding, `Literal` choices)
+- **Done when** · retrieval metrics with vs. without rewriting ✅ 2026-10-26
 
 ### Phase 4 — MCP Server + Multi-Agent  →  *Module 4*
 - [ ] **MCP server**: `search_products(query, category)`, `get_product(id)`, `list_categories()`
@@ -174,7 +175,7 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 - [ ] **LangGraph supervisor** (LLM-as-router, structured output)
 - [ ] **Specialists**: searcher, comparator (each a ReAct sub-graph with its own context)
 - [ ] **Writer** node: final answer, reasons from product text only
-- [ ] **LLM calls with `ChatOllama(reasoning=True)`** — read `message.content` as the shopper-facing answer and `message.additional_kwargs["reasoning_content"]` as the reasoning trace; `reasoning=False` leaks reasoning into free-text and tool-call replies (see Risks). **Exception (decided 2026-10-26):** schema-constrained calls (need analyst, supervisor router) use `reasoning=False` — no leak, 0.6 s vs 16.4 s; confirm on dev in Phase 3
+- [ ] **LLM calls with `ChatOllama(reasoning=True)`** — read `message.content` as the shopper-facing answer and `message.additional_kwargs["reasoning_content"]` as the reasoning trace; `reasoning=False` leaks reasoning into free-text and tool-call replies (see Risks). **Exception (decided 2026-10-26, confirmed on dev in Phase 3):** schema-constrained calls (need analyst, supervisor router) use `reasoning=False` — no leak, 28× faster, no retrieval loss
 - [ ] **Tune the writer prompt for prose** — with reasoning on, the clean answers came back as terse `Title: "quote"` lists, dropping connective sentences
 - [ ] **Separate model time from transport time** in the latency comparison, or the MCP-vs-local ablation measures the model, not the transport
 - **Builds on** · Module 4 · Multi_Agent_System_End_to_End + MCP_Server_and_Tools_Lab
@@ -281,7 +282,7 @@ Title + Team + Contributions
 | ~~Small model misses tool calls / structured output~~ · **VERIFIED OK 2026-10-24** | Probed against local Ollama: emits `search_products` unprompted with correct args, consumes tool results via the `tool_name` key, returns valid schema-constrained JSON for the need-analyst schema, and resolves "that one" to `add_to_cart`. Calls no tool on a bare greeting. No rule-based fallback needed |
 | **Model reasoning leaks into the shopper-facing answer** | **Run LLM calls with reasoning on** — raw `ollama` client: `think=True` → `message.thinking`; LangChain (what we use): `ChatOllama(reasoning=True)` → `additional_kwargs["reasoning_content"]`. With it off, ~1–7k chars of "Okay, let's see…" narration land in `content`; a system prompt telling it to answer directly does **not** stop it. With it on, `content` is clean — 3/3 samples, 227–234 chars, zero leaked markers, every line quoting the product text. Re-confirmed via LangChain 2026-10-26 (free text, tool calls). Schema-constrained calls don't leak either way |
 | `ori_review` leaks into the index | Never read it into the index; assert in code |
-| Retrieval metrics look bad | Start with hybrid+rerank (Module 3 shows it beats raw BM25/dense) |
+| Retrieval metrics look bad | **Happened on raw requests** (BM25 Recall@10 0.10; ~⅓ of gold items in no top 100). Mitigated by query rewriting (system Recall@10 0.45); next lever: BLaIR product embedder (stretch) |
 | Cart action fires without approval | `RISKY_TOOLS` + `interrupt()`; assert 100% in eval |
 | Ollama tool results silently dropped | key `tool_name` (not `name`) in tool results |
 | Notebook too slow to re-run | QUICK_RUN flag; cache the FAISS index |
