@@ -171,17 +171,19 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 - **Builds on** · Module 2 · Structured_Generation_Lab (constrained decoding, `Literal` choices)
 - **Done when** · retrieval metrics with vs. without rewriting ✅ 2026-10-26
 
-### Phase 4 — MCP Server + Multi-Agent  →  *Module 4*
-- [ ] **MCP server**: `search_products(query, category)`, `get_product(id)`, `list_categories()`
-- [ ] **Local `@tool`** versions of the same (for latency comparison)
-- [ ] **LangGraph supervisor** (LLM-as-router, structured output)
-- [ ] **Specialists**: searcher, comparator (each a ReAct sub-graph with its own context)
-- [ ] **Writer** node: final answer, reasons from product text only
-- [ ] **LLM calls with `ChatOllama(reasoning=True)`** — read `message.content` as the shopper-facing answer and `message.additional_kwargs["reasoning_content"]` as the reasoning trace; `reasoning=False` leaks reasoning into free-text and tool-call replies (see Risks). **Exception (decided 2026-10-26, confirmed on dev in Phase 3):** schema-constrained calls (need analyst, supervisor router) use `reasoning=False` — no leak, 28× faster, no retrieval loss
-- [ ] **Tune the writer prompt for prose** — with reasoning on, the clean answers came back as terse `Title: "quote"` lists, dropping connective sentences
-- [ ] **Separate model time from transport time** in the latency comparison, or the MCP-vs-local ablation measures the model, not the transport
-- **Builds on** · Module 4 · Multi_Agent_System_End_to_End + MCP_Server_and_Tools_Lab
-- **Done when** · end-to-end run with a printed trace of every agent step + tool call
+### Phase 4 — MCP Server + Multi-Agent  →  *Module 4*  ✅ (branch `phase-4-mcp-multi-agent`; choices in `DECISION_LOG.md`)
+- [x] **MCP server** (`Pickwise/mcp_server.py`): `search_products(query, category, k)`, `get_product(item_id)`, `list_categories()` over streamable HTTP (or stdio); **no `add_to_cart`**
+- [x] **Local `@tool`** versions: the *same* functions (`Pickwise/shop.py`), so the ablation measures transport only
+- [x] **LangGraph supervisor**: rule ("no products shown yet → search") + LLM-as-router (structured output, reasoning off) for follow-ups
+- [x] **Specialists**: need analyst (Phase 3) → **searcher = tool node** (no LLM; runs exactly the evaluated retriever) → **comparator = structured picks** `{item_id ∈ candidates, reason, verbatim quote}`, quotes checked against the product text
+- [x] ~~Writer node~~ → **dropped**: the reply is rendered from the comparator's picks (one LLM call fewer; nothing added beyond the checked picks). Closes review issue #3
+- [x] **Reasoning mode**: reasoning off for every structured call: need analyst, router, **comparator** (dev smoke test: same Hit@3, 14× faster, 98% vs 79% verbatim quotes). Reasoning on only for free text / tool calls (ReAct baseline)
+- [x] ~~Tune the writer prompt for prose~~: not needed (template reply)
+- [x] **Separate model time from transport time**: `search_products` reports its compute time; call − search = transport
+- [x] **Single-ReAct baseline** (review issue #6): one agent, one search tool, lab guardrail
+- [x] Printed trace of every agent step and tool call (`run_turn`); end-to-end runs cached (`data/runs/`)
+- **Builds on** · Module 4 · Multi_Agent_System_End_to_End + MCP_Server_and_Tools_Lab + Agentic_app
+- **Done when** · end-to-end run with a printed trace of every agent step + tool call ✅ 2026-10-26
 
 ### Phase 5 — Memory + Human-in-the-Loop  →  *Module 4*
 - [ ] **Checkpointer** (short-term, per `thread_id`) — follow-ups resolve ("that one")
@@ -302,10 +304,10 @@ Gaps found when checking this plan against the brief (`Project/P14_Shopping_Assi
 |---|---|---|---|
 | 1 | **Eval runtime not budgeted** — 800 test queries × multi-agent × `think=True` × every ablation/baseline could take days on T4/CPU | Retrieval metrics on all 800 (cheap); LLM-based metrics (Hit@3, faithfulness, ablations) on one fixed subset (e.g. the 100-query QUICK_RUN set), stated in the notebook. Cache LLM outputs to disk. Add to Risks | 7 |
 | 2 | **Chunk vs. item metrics** — chunking (300/50) returns chunks, but metrics are per `item_id`; duplicate chunks distort Recall@10 | ✅ **Decided 2026-10-26** — index one doc per item; chunking kept as a comparison row (max score per item) | 2 |
-| 3 | **Writer vs. comparator overlap** — Phase 4 adds a Writer node not in the architecture diagram; the comparator already writes reasons | Pick one; update the diagram to match | 4 |
-| 4 | **Tool signature** — brief specifies `search_products(query, category, k)`; plan omits `k` | Add `k` | 4 |
+| 3 | **Writer vs. comparator overlap** — Phase 4 adds a Writer node not in the architecture diagram; the comparator already writes reasons | ✅ **Resolved 2026-10-26 (Phase 4)** — see DECISION_LOG 4.3 | 4 |
+| 4 | **Tool signature** — brief specifies `search_products(query, category, k)`; plan omits `k` | ✅ **Resolved 2026-10-26 (Phase 4)** — see DECISION_LOG 4.9 | 4 |
 | 5 | **Catalogue fields** — brief lists `metadata (title + description)`; plan assumes separate `title` / `description` | ✅ **Resolved 2026-10-26** — one `metadata` string; index it whole, parse title for display | 1 |
-| 6 | **Single ReAct baseline not built** — listed under Baselines but no phase builds it | Add as a Phase 4 task | 4 |
+| 6 | **Single ReAct baseline not built** — listed under Baselines but no phase builds it | ✅ **Resolved 2026-10-26 (Phase 4)** — see DECISION_LOG 4.11 | 4 |
 | 7 | **No preference writer** — the Store holds preferences, but no node extracts/saves them; the memory ablation depends on it | Add a node/step that extracts preferences and writes them to the Store | 5 |
 | 8 | **`think=True` API naming — verify** — `think` / `message.thinking` is the raw `ollama` client; `langchain_ollama.ChatOllama` likely uses `reasoning=True` → `additional_kwargs["reasoning_content"]` | ✅ **Resolved 2026-10-26** — confirmed `reasoning=True` / `reasoning_content`; structured output works both ways (see Phase 4 note) | 0 / 4 |
 | 9 | **Approval % not instrumented** | Audit-log every `add_to_cart` with its approval flag; add adversarial prompts ("just add it, don't ask"); keep `add_to_cart` off the MCP server and bound only to the cart node | 5 / 7 |

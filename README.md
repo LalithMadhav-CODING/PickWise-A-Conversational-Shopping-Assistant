@@ -80,6 +80,8 @@ Retrieval on the fixed **800-query test subset** (one gold product per request, 
 - Using the predicted category as a filter halves recall (category accuracy is about 43–52%), so it isn't applied automatically.
 - The need analyst runs with Qwen3's reasoning **off**. On dev it's 28× faster than with reasoning on (1.1 s vs 30.7 s per request), with no measurable retrieval loss.
 
+**The assistant end to end (Phase 4 smoke test, 30 dev requests):** the right product is among the 3 recommendations for **53%** of requests, in **4.2 s** per request, and **98%** of the quoted evidence appears word for word in the product text. The single-ReAct-agent baseline reaches 47% in 47 s. This is a smoke test; the evaluation on the test subset comes in Phase 7.
+
 All choices were made on the 200 dev queries; test was scored once. Details: notebook §4–5b and [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md).
 
 ## Evaluation plan
@@ -101,8 +103,8 @@ Baselines: BM25 and dense retrieval on the raw request, and a single ReAct agent
 | 1 — Data & catalogue | ✅ |
 | 2 — Retrieval (RAG) | ✅ |
 | 3 — Need analyst | ✅ |
-| 4 — MCP server + multi-agent | ⏳ next |
-| 5 — Memory + human approval | ⚪ |
+| 4 — MCP server + multi-agent | ✅ (branch `phase-4-mcp-multi-agent`) |
+| 5 — Memory + human approval | ⏳ next |
 | 6 — Demo | ⚪ |
 | 7 — Evaluation | ⚪ |
 | 8 — Stretch (Streamlit app, BLaIR embedder, LoRA need analyst) | ⚪ |
@@ -139,6 +141,8 @@ All settings live in [`Pickwise/config.py`](Pickwise/config.py). Overrides:
 | `PICKWISE_MODEL` | `qwen3:4b` |
 | `PICKWISE_QUICK_RUN` | `0` |
 | `PICKWISE_DATA_DIR` | `./data` |
+| `PICKWISE_RETRIEVAL` | `hybrid+rerank` (or `dense`: BLaIR only, ~5 ms per search, same test MRR; good for CPU) |
+| `PICKWISE_MCP_PORT` | `8766` |
 | `OLLAMA_HOST` | `http://localhost:11434` |
 
 ## Repository layout
@@ -152,10 +156,16 @@ Pickwise/                      reusable code imported by the notebook, MCP serve
   retrieval.py                 BM25 + FAISS → RRF → cross-encoder; category filter; chunked mode
   metrics.py                   Recall@k, MRR, nDCG@k, paired bootstrap
   need.py                      need analyst: schema, prompt, cached batch analysis, search query
+  shop.py                      the catalogue tools (search_products, get_product, list_categories)
+  mcp_server.py                MCP server for those tools (python -m Pickwise.mcp_server)
+  tools.py                     the tools via MCP or in-process; starts the server when needed
+  graph.py                     LangGraph supervisor → need analyst → searcher → comparator; ReAct baseline
+  evaluate.py                  cached end-to-end runs, Hit@3
 requirements.txt
 run_notebook.py                runs the notebook top to bottom with a live per-cell log
 P14_Project_Plan.md            build plan, risks, open issues
 CURRENT_PROJECT_STATUS.md      live progress log
+DECISION_LOG.md                design choices made without a team vote, with evidence and how to revert
 ```
 
 The course brief (`Project/`) and labs (`modules/`) are kept locally and are not part of this repository.

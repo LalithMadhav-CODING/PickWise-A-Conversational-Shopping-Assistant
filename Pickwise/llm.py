@@ -20,3 +20,18 @@ def get_llm(model: str = config.MODEL, reasoning: bool = config.REASONING) -> Ch
 def reasoning_trace(message) -> str:
     """The model's thinking for one reply ('' when reasoning is off)."""
     return message.additional_kwargs.get("reasoning_content", "")
+
+
+NUDGE = "You must call one of your tools now. Do not answer from memory."
+
+
+async def ainvoke_requiring_tool(model, messages: list, retries: int = 2):
+    """Ollama ignores tool_choice, so the harness enforces it: nudge and retry until the model calls a tool.
+    From Module 4 · Agentic_app (llm.py)."""
+    from langchain_core.messages import HumanMessage
+    reply = await model.ainvoke(messages)
+    for _ in range(retries):
+        if reply.tool_calls:
+            break
+        reply = await model.ainvoke(messages + [reply, HumanMessage(NUDGE)])
+    return reply

@@ -12,8 +12,8 @@ Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_P
 | 1 — Data & Catalogue | ✅ done 2026-10-26 |
 | 2 — Retrieval (RAG) | ✅ done 2026-10-26 |
 | 3 — Need Analyst | ✅ done 2026-10-26 |
-| 4 — MCP Server + Multi-Agent | ⚪ next |
-| 5 — Memory + Human-in-the-Loop | ⚪ not started |
+| 4 — MCP Server + Multi-Agent | ✅ done 2026-10-26 (branch `phase-4-mcp-multi-agent`) |
+| 5 — Memory + Human-in-the-Loop | ⚪ next |
 | 6 — Demo Cell | ⚪ not started |
 | 7 — Evaluation | ⚪ not started |
 | 8 — Stretch Goals | ⚪ not started |
@@ -221,6 +221,31 @@ Paired bootstrap, system minus:
 **Takeaways:** the upgrade is the largest gain in the project. With BLaIR, the hybrid + re-ranker + rewrite pipeline is no better than BLaIR alone on the raw request, which is a ~5 ms, CPU-friendly fallback. The system keeps the brief's pipeline (chosen on dev; test isn't used for choices). Limitation: BLaIR's pretraining (Amazon Reviews 2023) may overlap with the reviews the C4 queries were written from.
 - Notebook: §5b *Retrieval model upgrade* (dev comparison of 3 embedders × 4 re-rankers, test rows, paired bootstrap); full run 32 min (`run_notebook.py`, live log in `notebook_run.log`).
 
+## Phase 4 — MCP Server + Multi-Agent ✅ (branch `phase-4-mcp-multi-agent`)
+
+Choices were made without asking, as requested; every one is in [`DECISION_LOG.md`](DECISION_LOG.md) (4.1–4.16, R.1–R.2).
+
+- [x] `Pickwise/shop.py`: `search_products(query, category, k)`, `get_product(item_id)`, `list_categories()`. **One set of functions for both transports**, JSON out, and search reports its own compute time.
+- [x] `Pickwise/mcp_server.py`: FastMCP server over streamable HTTP (127.0.0.1:8766) or stdio, plus the `catalogue://stats` resource. **`add_to_cart` is not exposed.**
+- [x] `Pickwise/tools.py`: local `@tool`s, `ensure_server()` auto-start, `get_tools("mcp" | "local")`.
+- [x] `Pickwise/graph.py`: supervisor (rule + LLM router) → need analyst → **searcher (tool node)** → **comparator (structured picks + verbatim quotes, `Literal` item ids)**; no separate writer; `run_turn` prints a trace of every step and tool call; single-ReAct baseline `build_react_baseline` / `run_react`.
+- [x] `Pickwise/evaluate.py`: cached end-to-end runs (`data/runs/`), Hit@3 summary.
+- [x] `PICKWISE_RETRIEVAL=dense` switch (BLaIR only) for CPU runs.
+- [x] Notebook §5b *MCP server, searcher and comparator*: tools/list, MCP vs local latency (search vs transport), graph (Mermaid), traced turns, ReAct baseline, smoke test.
+
+### Smoke test (30 dev requests)
+| Variant | Hit@3 | s / request | quotes verbatim |
+|---|---|---|---|
+| **System** (comparator reasoning off, default) | 0.533 | **4.2** | **97.8%** |
+| System, comparator reasoning on | 0.567 | 58.8 | 78.9% |
+| Single ReAct agent | 0.467 | 46.9 | — |
+
+Reasoning on − off: ΔHit@3 +0.033 [−0.10, +0.17] → **reasoning off** (decision 4.15). One turn on a free GPU: need analyst ≈ 1–2 s, MCP search ≈ 0.5 s, comparator ≈ 3 s.
+
+- **MCP vs local (20 dev searches): identical rankings.** Search compute ≈ 0.46 s either way; MCP transport ≈ 0.027 s per call (≈ 6%).
+- Full notebook run: 31.7 min (26 code cells), no errors.
+- **Known issue → Phase 7:** quotes often copy the title, and reasons can go beyond the quote, so the quote check is not a faithfulness score. The LLM judge must check the reasons (DECISION_LOG 4.17).
+
 ## Findings / notes
 
 - Catalogue jsonl schema: `{"item_id", "category", "metadata"}` — `metadata` is one string, title first. Short items often look like `"Her Leaves Remain. ."`.
@@ -237,3 +262,4 @@ See *Plan Review — Open Issues* in `P14_Project_Plan.md`. Resolved so far: #2 
 - 2026-10-26 — Package folder renamed to `Pickwise/` (capital P); imports and docs updated, notebook re-run clean. README added; first push to GitHub.
 - 2026-10-26 — **Phases 2 and 3 done.** Retrieval (`retrieval.py`, `metrics.py`) and need analyst (`need.py`) built; notebook §4–5b filled; dev tuning + test results + paired bootstrap; reasoning-off confirmed for structured calls. Next: Phase 4 (MCP server + multi-agent).
 - 2026-10-26 — **Retrieval model upgrade adopted** (BLaIR + Qwen3-Reranker top 20): test Recall@10 0.548 / MRR 0.360 (+9.5 pts / +0.085 over the lab models). `run_notebook.py` added (live per-cell log). GPU was briefly blocked by another Ollama model (qwen3-coder:30b) — unloaded on request.
+- 2026-10-26 — **Phase 4 built** on branch `phase-4-mcp-multi-agent`: MCP server + local tools, multi-agent graph, ReAct baseline, smoke test (system 0.533 Hit@3 at 4.2 s/request). `DECISION_LOG.md` started.

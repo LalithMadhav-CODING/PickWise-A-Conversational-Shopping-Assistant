@@ -87,6 +87,12 @@ def analyse(request: str, reasoning: bool = False, model: str = config.MODEL) ->
     return analyst.invoke([("system", SYSTEM_PROMPT), ("human", request)])
 
 
+async def aanalyse(request: str, reasoning: bool = False, model: str = config.MODEL) -> ShoppingNeed:
+    """Async analyse, for the agent graph."""
+    analyst = get_llm(model, reasoning).with_structured_output(ShoppingNeed)
+    return await analyst.ainvoke([("system", SYSTEM_PROMPT), ("human", request)])
+
+
 def cache_path(reasoning: bool, model: str = config.MODEL):
     return config.DATA_DIR / "needs" / f"{model.replace(':', '-')}_reasoning-{reasoning}_{PROMPT_VERSION}.jsonl"
 

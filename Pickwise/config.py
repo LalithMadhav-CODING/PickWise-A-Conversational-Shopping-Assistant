@@ -41,6 +41,16 @@ RRF_WEIGHTS = (1.0, 1.0)  # (BM25, dense) weights in the fusion; equal = the lab
 CHUNK_SIZE = 300          # only for the chunking comparison; the main index is one document per product
 CHUNK_OVERLAP = 50
 
+# --- MCP server + agents (Phase 4) ---------------------------------------------------------------
+MCP_HOST = os.getenv("PICKWISE_MCP_HOST", "127.0.0.1")
+MCP_PORT = int(os.getenv("PICKWISE_MCP_PORT", "8766"))
+MCP_URL = f"http://{MCP_HOST}:{MCP_PORT}/mcp"
+# How search_products ranks: "hybrid+rerank" (default, the brief's pipeline) or "dense" (BLaIR only: same
+# test MRR, ~5 ms instead of ~0.3 s GPU / ~10 s CPU per search; see DECISION_LOG.md R.2)
+RETRIEVAL_METHOD = os.getenv("PICKWISE_RETRIEVAL", "hybrid+rerank")
+N_CANDIDATES = 10         # products the searcher hands to the comparator
+SNIPPET_CHARS = 700       # product text shown to the comparator per candidate (title comes first)
+
 # --- Harness --------------------------------------------------------------------------------------
 RECURSION_LIMIT = 25
 RISKY_TOOLS = {"add_to_cart"}   # the harness asks the shopper before running any of these
