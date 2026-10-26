@@ -117,9 +117,11 @@ Memory:  checkpointer (this chat)  +  Store (shopper preferences)
 | Purpose | Model | Notes |
 |---|---|---|
 | Agents (tool calling, structured output) | **qwen3:4b** | primary; `qwen3:1.7b` fallback. **Run with `ChatOllama(reasoning=True)`** — with `reasoning=False` reasoning leaks into the answer (see Risks) |
-| Embeddings | `BAAI/bge-small-en-v1.5` | 384-dim, CPU-friendly; with the bge query instruction (slightly better than without on dev) |
-| Re-ranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` | cross-encoder, top of the hybrid pipeline |
-| Optional product embedder | `hyp1231/blair-roberta-base` | stretch comparison |
+| Embeddings (system) | **`hyp1231/blair-roberta-base`** (BLaIR, 0.1B) | the brief's optional product embedder; CLS pooling; **adopted 2026-10-26** — dev Recall@10 0.61 vs 0.465 (dense, raw) |
+| Re-ranker (system) | **`Qwen/Qwen3-Reranker-0.6B`**, top 20 | a Qwen model ≤ 4B; first re-ranker that improves MRR on long requests; ~0.33 s/query GPU, ~10 s CPU |
+| Embeddings (lab baseline) | `BAAI/bge-small-en-v1.5` | 384-dim, with the bge query instruction; Phase 2 baselines + ablation |
+| Re-ranker (lab baseline) | `cross-encoder/ms-marco-MiniLM-L-6-v2`, top 50 | Phase 2 pipeline + ablation |
+| Also tested (dev) | `Qwen3-Embedding-0.6B`, `bge-reranker-base`, `bge-reranker-v2-m3` | not adopted (smaller or no gains); EmbeddingGemma-300M gated on HF, not tested |
 | Optional LoRA need analyst | `Qwen2.5-0.5B` | stretch; 2–5k C4 queries outside test subset |
 
 **Compute** · free Colab T4 or laptop CPU ≤ 4B params · no paid APIs
@@ -210,7 +212,7 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 
 ### Phase 8 — Stretch Goals (top marks)
 - [ ] Streamlit/Gradio app (chat, live trace, cart approve/reject, MCP/local switch)
-- [ ] BLaIR embedder vs. general embedders
+- [x] BLaIR embedder vs. general embedders — **done and adopted** (plus re-ranker comparison; notebook §5b *Retrieval model upgrade*)
 - [ ] LoRA-tuned need analyst
 - **Builds on** · Module 4 · Agentic_app (Streamlit reference)
 - **Done when** · at least one stretch goal working
@@ -282,10 +284,13 @@ Title + Team + Contributions
 | ~~Small model misses tool calls / structured output~~ · **VERIFIED OK 2026-10-24** | Probed against local Ollama: emits `search_products` unprompted with correct args, consumes tool results via the `tool_name` key, returns valid schema-constrained JSON for the need-analyst schema, and resolves "that one" to `add_to_cart`. Calls no tool on a bare greeting. No rule-based fallback needed |
 | **Model reasoning leaks into the shopper-facing answer** | **Run LLM calls with reasoning on** — raw `ollama` client: `think=True` → `message.thinking`; LangChain (what we use): `ChatOllama(reasoning=True)` → `additional_kwargs["reasoning_content"]`. With it off, ~1–7k chars of "Okay, let's see…" narration land in `content`; a system prompt telling it to answer directly does **not** stop it. With it on, `content` is clean — 3/3 samples, 227–234 chars, zero leaked markers, every line quoting the product text. Re-confirmed via LangChain 2026-10-26 (free text, tool calls). Schema-constrained calls don't leak either way |
 | `ori_review` leaks into the index | Never read it into the index; assert in code |
-| Retrieval metrics look bad | **Happened on raw requests** (BM25 Recall@10 0.10; ~⅓ of gold items in no top 100). Mitigated by query rewriting (system Recall@10 0.45); next lever: BLaIR product embedder (stretch) |
+| Retrieval metrics look bad | **Happened on raw requests** (BM25 Recall@10 0.10; ~⅓ of gold items in no top 100). Mitigated by query rewriting (Recall@10 0.45) and then the BLaIR + Qwen3-Reranker upgrade (**test Recall@10 0.548, MRR 0.360**) |
 | Cart action fires without approval | `RISKY_TOOLS` + `interrupt()`; assert 100% in eval |
 | Ollama tool results silently dropped | key `tool_name` (not `name`) in tool results |
 | Notebook too slow to re-run | QUICK_RUN flag; cache the FAISS index |
+| **BLaIR may have seen the reviews C4 queries were written from** (pretrained on Amazon Reviews 2023) | Keep the lab-model rows (bge-small) in every results table so the gain without BLaIR is visible; state it in Limitations and the talk |
+| Qwen3-Reranker slow on CPU (~10 s per search, top 20) | Re-rank only the top 20; the lab re-ranker stays available as a CPU fallback (`Retriever(rerank_model=config.LAB_RERANK_MODEL)`) |
+| GPU shared with other Ollama models (a 30B model filled 17 GB and caused an OOM, 2026-10-26) | Check `ollama ps` before long runs; unload other models first |
 
 ---
 

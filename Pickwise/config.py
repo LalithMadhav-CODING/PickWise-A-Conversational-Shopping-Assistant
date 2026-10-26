@@ -26,13 +26,18 @@ MODEL = os.getenv("PICKWISE_MODEL", "qwen3:4b")              # fallback: "qwen3:
 OLLAMA_URL = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 REASONING = True          # keeps Qwen3's thinking out of the answer (see plan: Risks)
 
-# --- RAG (same models as the Module 3 lab) --------------------------------------------------------
-EMBED_MODEL = "BAAI/bge-small-en-v1.5"
-RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+# --- RAG ----------------------------------------------------------------------------------------
+# System retriever (chosen on dev, 2026-10-26): product-specific embedder + Qwen3 re-ranker
+EMBED_MODEL = "hyp1231/blair-roberta-base"        # BLaIR, 0.1B, trained on Amazon item text <-> reviews
+RERANK_MODEL = "Qwen/Qwen3-Reranker-0.6B"         # a Qwen model <= 4B, as the brief allows
+RERANK_TOP_N = 20         # hybrid shortlist the re-ranker re-scores (top 20 = top 50 on dev, 2.5x faster)
+# Module 3 lab / brief defaults: the Phase 2 baselines, and an ablation of the model upgrade
+LAB_EMBED_MODEL = "BAAI/bge-small-en-v1.5"
+LAB_RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+LAB_RERANK_TOP_N = 50
 DEPTH = 100               # every ranking is cut at 100 products (MRR is computed over this depth)
 RRF_K = 60                # Reciprocal Rank Fusion constant (Module 3 lab default)
-RRF_WEIGHTS = (1.0, 1.0)  # (BM25, dense) weights in the fusion; equal = the lab's plain RRF (tuned on dev)
-RERANK_TOP_N = 50         # hybrid shortlist the cross-encoder re-scores (tuned on dev)
+RRF_WEIGHTS = (1.0, 1.0)  # (BM25, dense) weights in the fusion; equal = the lab's plain RRF
 CHUNK_SIZE = 300          # only for the chunking comparison; the main index is one document per product
 CHUNK_OVERLAP = 50
 

@@ -18,7 +18,7 @@ Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_P
 | 7 — Evaluation | ⚪ not started |
 | 8 — Stretch Goals | ⚪ not started |
 
-**Milestone M1 (Data + Retrieval): ✅** catalogue built; 4 retrieval variants scored. **M2 (Need analyst): ✅** rewriting vs raw measured on test; reasoning mode confirmed on dev.
+**Milestone M1 (Data + Retrieval): ✅** catalogue built; 4 retrieval variants scored. **M2 (Need analyst): ✅** rewriting vs raw measured on test; reasoning mode confirmed on dev. **Stretch: BLaIR embedder ✅** (adopted, with Qwen3-Reranker).
 
 ## Files so far
 
@@ -177,6 +177,50 @@ Paired bootstrap (2,000 resamples), system minus baseline:
 - ~30% of gold items aren't in any top 100 → the bottleneck is the general-purpose embedder on review-style requests. **The BLaIR embedder (stretch goal) is the most promising upgrade.**
 - **Decision (evidence-based, revisable):** system retriever = **hybrid + re-rank, lab defaults (equal-weight RRF k=60, re-rank top 50), on the query "rewrite. request"**. One query string (natural for the MCP tool), top-tier on dev, meets the brief's hybrid + re-ranker requirement.
 
+## Model upgrade (2026-10-26) ✅ adopted: BLaIR + Qwen3-Reranker
+
+Tried alternative open models for the two retrieval models (agent LLM unchanged). All on the 200 dev queries; test untouched.
+
+| Setting (query = rewrite + request unless noted) | Recall@10 | MRR | nDCG@10 | Recall@100 | GPU ms/query |
+|---|---|---|---|---|---|
+| **Current:** bge-small · hybrid · ms-marco re-rank top 50 | 0.475 | 0.260 | 0.305 | 0.660 | ~70 |
+| bge-small · hybrid · **Qwen3-Reranker-0.6B** top 50 | 0.525 | 0.349 | 0.388 | 0.660 | ~860 |
+| **BLaIR** · dense only · raw request | **0.610** | 0.364 | 0.417 | **0.795** | ~5 |
+| BLaIR · hybrid · ms-marco top 50 | 0.535 | 0.278 | — | 0.750 | ~70 |
+| **BLaIR · hybrid · Qwen3-Reranker top 20** | 0.590 | **0.381** | **0.426** | 0.750 | 334 |
+| BLaIR · hybrid · Qwen3-Reranker top 10 / 30 / 50 | 0.505 / 0.575 / 0.575 | 0.353 / 0.375 / 0.377 | | | 199 / 495 / 830 |
+| Qwen3-Embedding-0.6B · dense · raw | 0.465 | 0.302 | 0.335 | 0.710 | |
+| Qwen3-Embedding-0.6B · hybrid · Qwen3-Reranker top 50 | 0.550 | 0.353 | 0.396 | 0.675 | |
+| any embedder · bge-reranker-v2-m3 / bge-reranker-base | ≤ 0.495 | ≤ 0.321 | | | |
+
+- Paired bootstrap, best (BLaIR · Qwen3-Reranker) − current: **Recall@10 +0.095 [0.04, 0.15], MRR +0.118 [0.071, 0.164]**.
+- BLaIR (0.1B, Amazon-specific) beats the general-purpose embedders by a wide margin; Qwen3-Reranker is the first re-ranker that improves MRR on long requests; bge re-rankers don't help.
+- Qwen3-Reranker on CPU (8 threads): ~10 s per query for top 20, ~17 s for top 50.
+- EmbeddingGemma-300M not tested: gated on Hugging Face (needs a login + licence acceptance).
+- Caveats: dev only; BLaIR was pretrained on Amazon Reviews 2023 (possible overlap with the reviews C4 queries were written from → Limitations).
+- `Pickwise/retrieval.py`: `Retriever(embed_model=..., rerank_model=...)`; BLaIR loaded with CLS pooling (model-card recipe); Qwen3-Embedding query instruction added.
+- **Decision (team, 2026-10-26): adopt** BLaIR · hybrid RRF · Qwen3-Reranker top 20 as the system retriever (`config.EMBED_MODEL/RERANK_MODEL/RERANK_TOP_N`); the lab models stay as `config.LAB_*` for the Phase 2 rows and as an ablation. Each `Retriever` carries its own embedder, re-ranker and re-rank depth.
+
+### Test results (800 queries, scored once)
+
+| Condition | Recall@10 | MRR | nDCG@10 | Recall@100 |
+|---|---|---|---|---|
+| Hybrid + re-rank · rewrite + request (lab models, previous system) | 0.452 | 0.276 | 0.312 | 0.636 |
+| bge-small · hybrid + Qwen3 re-rank · rewrite + request | 0.430 | 0.303 | 0.329 | 0.636 |
+| BLaIR · hybrid + ms-marco re-rank · rewrite + request | 0.504 | 0.300 | 0.339 | 0.758 |
+| BLaIR · dense only · raw request | 0.575 | 0.356 | 0.401 | 0.804 |
+| BLaIR · hybrid + Qwen3 re-rank · raw request | 0.568 | 0.360 | 0.406 | 0.752 |
+| **BLaIR · hybrid + Qwen3 re-rank · rewrite + request (system)** | **0.548** | **0.360** | **0.400** | 0.758 |
+
+Paired bootstrap, system minus:
+- dense · raw (bge-small, best brief baseline): Recall@10 **+0.139** [0.107, 0.170], MRR **+0.112** [0.090, 0.135]
+- previous system (lab models): Recall@10 **+0.095** [0.066, 0.124], MRR **+0.085** [0.063, 0.106]
+- BLaIR · dense · raw: Recall@10 −0.028 [−0.054, 0.000], MRR +0.004 [−0.018, 0.027] → **level**
+- BLaIR · hybrid + Qwen3 · raw request: Recall@10 −0.020 [−0.044, 0.005], MRR +0.000 → **rewriting no longer helps with BLaIR**
+
+**Takeaways:** the upgrade is the largest gain in the project. With BLaIR, the hybrid + re-ranker + rewrite pipeline is no better than BLaIR alone on the raw request, which is a ~5 ms, CPU-friendly fallback. The system keeps the brief's pipeline (chosen on dev; test isn't used for choices). Limitation: BLaIR's pretraining (Amazon Reviews 2023) may overlap with the reviews the C4 queries were written from.
+- Notebook: §5b *Retrieval model upgrade* (dev comparison of 3 embedders × 4 re-rankers, test rows, paired bootstrap); full run 32 min (`run_notebook.py`, live log in `notebook_run.log`).
+
 ## Findings / notes
 
 - Catalogue jsonl schema: `{"item_id", "category", "metadata"}` — `metadata` is one string, title first. Short items often look like `"Her Leaves Remain. ."`.
@@ -192,3 +236,4 @@ See *Plan Review — Open Issues* in `P14_Project_Plan.md`. Resolved so far: #2 
 - 2026-10-26 — Project named **Pickwise**: package `p14/` → `Pickwise/`, env vars `P14_*` → `PICKWISE_*`, titles updated. Notebook re-run clean after the rename.
 - 2026-10-26 — Package folder renamed to `Pickwise/` (capital P); imports and docs updated, notebook re-run clean. README added; first push to GitHub.
 - 2026-10-26 — **Phases 2 and 3 done.** Retrieval (`retrieval.py`, `metrics.py`) and need analyst (`need.py`) built; notebook §4–5b filled; dev tuning + test results + paired bootstrap; reasoning-off confirmed for structured calls. Next: Phase 4 (MCP server + multi-agent).
+- 2026-10-26 — **Retrieval model upgrade adopted** (BLaIR + Qwen3-Reranker top 20): test Recall@10 0.548 / MRR 0.360 (+9.5 pts / +0.085 over the lab models). `run_notebook.py` added (live per-cell log). GPU was briefly blocked by another Ollama model (qwen3-coder:30b) — unloaded on request.

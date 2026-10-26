@@ -37,10 +37,10 @@ Memory: checkpointer (this chat) + Store (shopper preferences: brands, budget, d
 | Component | Choice |
 |---|---|
 | Agents | `qwen3:4b` via Ollama (`reasoning=True` for free text and tool calls; `reasoning=False` for structured output) |
-| Embeddings | `BAAI/bge-small-en-v1.5` (with the bge query instruction) |
-| Re-ranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
+| Embeddings | **`hyp1231/blair-roberta-base`** (BLaIR, 0.1B, product-specific); lab baseline: `BAAI/bge-small-en-v1.5` |
+| Re-ranker | **`Qwen/Qwen3-Reranker-0.6B`** on the top 20; lab baseline: `cross-encoder/ms-marco-MiniLM-L-6-v2` |
 | Need analyst | long request → `{product_type, must_haves, category}` via schema-constrained output |
-| Retrieval | BM25 + FAISS dense → Reciprocal Rank Fusion → cross-encoder (top 50); one document per product; query = *rewrite + the shopper's own words* |
+| Retrieval | BM25 + FAISS dense → Reciprocal Rank Fusion → re-ranker; one document per product; query = *rewrite + the shopper's own words* |
 | Orchestration | LangGraph supervisor + specialists, checkpointer + Store, `interrupt()` before `add_to_cart` |
 | Tools | MCP server (`search_products`, `get_product`, `list_categories`) and the same functions as local `@tool`s |
 
@@ -65,14 +65,22 @@ Retrieval on the fixed **800-query test subset** (one gold product per request, 
 | Hybrid + re-rank · raw request · chunked index | 0.399 | 0.226 | 0.261 |
 | BM25 · rewrite + request | 0.234 | 0.140 | 0.158 |
 | Hybrid + re-rank · rewrite only | 0.442 | 0.257 | 0.294 |
-| **Hybrid + re-rank · rewrite + request (system retriever)** | **0.452** | **0.276** | **0.312** |
+| Hybrid + re-rank · rewrite + request (lab models) | 0.452 | 0.276 | 0.312 |
+| *Model upgrade (stretch goal):* | | | |
+| bge-small · hybrid + **Qwen3** re-rank · rewrite + request | 0.430 | 0.303 | 0.329 |
+| **BLaIR** · hybrid + ms-marco re-rank · rewrite + request | 0.504 | 0.300 | 0.339 |
+| BLaIR · dense only · raw request | 0.575 | 0.356 | 0.401 |
+| BLaIR · hybrid + Qwen3 re-rank · raw request | 0.568 | 0.360 | 0.406 |
+| **BLaIR · hybrid + Qwen3 re-rank · rewrite + request (system retriever)** | **0.548** | **0.360** | **0.400** |
 
 - **Situational requests defeat keyword search**: BM25 finds the gold product in the top 10 for about 1 request in 10.
-- **The need analyst's rewrite helps the full pipeline.** Against the best baseline (dense on the raw request), the system retriever adds +4.4 points Recall@10 (95% CI [1.9, 6.9]) and +0.027 MRR ([0.007, 0.048]) in a paired bootstrap.
+- **With the lab models, the need analyst's rewrite helps the full pipeline:** +4.4 points Recall@10 (95% CI [1.9, 6.9]) and +0.027 MRR ([0.007, 0.048]) over the best baseline (dense on the raw request), in a paired bootstrap.
+- **The model upgrade is the biggest gain.** BLaIR (a product-specific embedder) plus Qwen3-Reranker add **+9.5 points Recall@10 [6.6, 12.4] and +0.085 MRR [0.063, 0.106]** over the same pipeline with the lab models, and **+14 points Recall@10** over the best baseline.
+- **With BLaIR, the rest of the pipeline adds nothing measurable on test.** BLaIR on the raw request alone is level with the system (MRR +0.004 [−0.018, 0.027]). The system keeps the brief's hybrid + re-ranker, which was chosen on dev, and BLaIR-only is a fast fallback for CPU. BLaIR's pretraining data may overlap with the reviews the queries came from (see Limitations).
 - Using the predicted category as a filter halves recall (category accuracy is about 43–52%), so it isn't applied automatically.
 - The need analyst runs with Qwen3's reasoning **off**. On dev it's 28× faster than with reasoning on (1.1 s vs 30.7 s per request), with no measurable retrieval loss.
 
-All choices were made on the 200 dev queries; test was scored once. Details: notebook §4–5 and [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md).
+All choices were made on the 200 dev queries; test was scored once. Details: notebook §4–5b and [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md).
 
 ## Evaluation plan
 
@@ -113,12 +121,12 @@ ollama pull qwen3:4b
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
-# 3. Run the notebook end to end
-.venv/bin/jupyter execute --inplace P14_Shopping_Assistant.ipynb
+# 3. Run the notebook end to end, with a live log (watch it with: tail -f notebook_run.log)
+.venv/bin/python run_notebook.py
 #    or open it in Jupyter / VS Code with the .venv kernel
 ```
 
-The first run streams the 640 MB catalogue file (≈ 3 min), embeds the catalogue and analyses 1,000 requests with the LLM (≈ 15 min on a GPU, plus about an hour for the reasoning-on comparison). Everything is cached in `data/`, so later runs only re-score (a few minutes). Set `PICKWISE_QUICK_RUN=1` for a 100-query test subset.
+The first run streams the 640 MB catalogue file (≈ 3 min), embeds the catalogue and analyses 1,000 requests with the LLM (≈ 15 min on a GPU, plus about an hour for the reasoning-on comparison), and embeds the catalogue with three embedders for the model comparison. Everything is cached in `data/`; a re-run then takes about 30 min on a GPU, mostly re-ranking. Set `PICKWISE_QUICK_RUN=1` for a 100-query test subset.
 
 It also runs on a free Colab T4: clone the repo, then install and start Ollama in the runtime (see the notebook's Setup section).
 
@@ -145,6 +153,7 @@ Pickwise/                      reusable code imported by the notebook, MCP serve
   metrics.py                   Recall@k, MRR, nDCG@k, paired bootstrap
   need.py                      need analyst: schema, prompt, cached batch analysis, search query
 requirements.txt
+run_notebook.py                runs the notebook top to bottom with a live per-cell log
 P14_Project_Plan.md            build plan, risks, open issues
 CURRENT_PROJECT_STATUS.md      live progress log
 ```

@@ -3,7 +3,7 @@
 Adapted from Module 4 · Agentic_app (relay_ops/rag.py), which packages Module 3 · RAG_Pipeline_Lab:
 
     product text  -> one document per product   (or 300/50 chunks with a title header, for comparison)
-        -> dense (FAISS + bge-small)  +  sparse (BM25)
+        -> dense (FAISS + an embedder: BLaIR for the system, bge-small in the lab baseline)  +  sparse (BM25)
         -> hybrid fusion (Reciprocal Rank Fusion)
         -> cross-encoder re-rank of the hybrid shortlist
 
@@ -21,8 +21,14 @@ import pandas as pd
 
 from . import config
 
-# bge models are trained with an instruction in front of short queries (model card); documents get none
-QUERY_PREFIX = {"BAAI/bge-small-en-v1.5": "Represent this sentence for searching relevant passages: "}
+# Query instructions from each model card; documents get none
+QUERY_PREFIX = {
+    "BAAI/bge-small-en-v1.5": "Represent this sentence for searching relevant passages: ",
+    "Qwen/Qwen3-Embedding-0.6B": "Instruct: Given a shopper's description of what they need, retrieve the "
+                                 "product that satisfies it\nQuery:",
+}
+# Models without a sentence-transformers config, built from their model card's recipe
+CLS_POOLING = {"hyp1231/blair-roberta-base"}       # BLaIR: first-token embedding, L2-normalised
 METHODS = ("bm25", "dense", "hybrid", "hybrid+rerank", "dense+rerank")
 
 
@@ -45,13 +51,23 @@ def chunk_catalogue(catalogue: pd.DataFrame) -> tuple:
 @lru_cache(maxsize=2)
 def get_embedder(name: str = config.EMBED_MODEL):
     from sentence_transformers import SentenceTransformer
-    return SentenceTransformer(name)
+    if name in CLS_POOLING:
+        from sentence_transformers.sentence_transformer.modules import Normalize, Pooling, Transformer
+        encoder = Transformer(name, max_seq_length=512)
+        pooling = Pooling(encoder.get_embedding_dimension(), pooling_mode="cls")
+        return SentenceTransformer(modules=[encoder, pooling, Normalize()])
+    model = SentenceTransformer(name)
+    model.max_seq_length = min(model.max_seq_length or 512, 512)    # product text beyond 512 tokens is tail
+    return model
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=2)
 def get_reranker(name: str = config.RERANK_MODEL):
+    import torch
     from sentence_transformers import CrossEncoder
-    return CrossEncoder(name, max_length=512)
+    # bfloat16 weights run slowly on many CPUs; float32 there, the checkpoint's dtype on GPU
+    kwargs = {} if torch.cuda.is_available() else {"model_kwargs": {"dtype": torch.float32}}
+    return CrossEncoder(name, max_length=512, **kwargs)
 
 
 class BM25:
@@ -106,8 +122,9 @@ def rrf(rankings: list, depth: int = config.DEPTH, k_const: int = config.RRF_K, 
 class Retriever:
     """One index over the catalogue: BM25 + FAISS, fused with RRF, optionally re-ranked."""
 
-    def __init__(self, catalogue: pd.DataFrame, chunked: bool = False,
-                 embed_model: str = config.EMBED_MODEL, query_prefix: bool = True):
+    def __init__(self, catalogue: pd.DataFrame, chunked: bool = False, embed_model: str = config.EMBED_MODEL,
+                 query_prefix: bool = True, rerank_model: str = config.RERANK_MODEL,
+                 rerank_top_n: int = config.RERANK_TOP_N):
         import faiss
         self.catalogue = catalogue.reset_index(drop=True)
         if chunked:
@@ -116,6 +133,8 @@ class Retriever:
             self.texts, self.doc_item = list(self.catalogue["text"]), np.arange(len(self.catalogue))
         self.chunked = chunked
         self.embed_model = embed_model
+        self.rerank_model = rerank_model
+        self.rerank_top_n = rerank_top_n
         self.query_prefix = QUERY_PREFIX.get(embed_model, "") if query_prefix else ""
         doc_category = self.catalogue["category"].to_numpy()[self.doc_item]
         self.category_docs = {c: np.flatnonzero(doc_category == c) for c in np.unique(doc_category)}
@@ -190,11 +209,12 @@ class Retriever:
         return [rrf(pair, depth, k_const, weights) for pair in zip(self.sparse(queries, depth, categories),
                                                                    self.dense(queries, depth, categories))]
 
-    def rerank(self, queries: list, rankings: list, top_n: int = config.RERANK_TOP_N) -> list:
+    def rerank(self, queries: list, rankings: list, top_n: int = None) -> list:
         """Cross-encoder re-scores each ranking's top_n; the rest keep their hybrid order behind them."""
+        top_n = top_n or self.rerank_top_n
         texts = self.catalogue["text"].str.slice(0, 2000).to_numpy()     # the model truncates at 512 tokens anyway
         pairs = [(q, texts[i]) for q, ranking in zip(queries, rankings) for i in ranking[:top_n]]
-        scores = get_reranker().predict(pairs, batch_size=128, show_progress_bar=False) if pairs else []
+        scores = get_reranker(self.rerank_model).predict(pairs, batch_size=64, show_progress_bar=False) if pairs else []
         out, start = [], 0
         for ranking in rankings:
             head = ranking[:top_n]
@@ -204,7 +224,7 @@ class Retriever:
         return out
 
     def rank(self, queries: list, method: str = "hybrid+rerank", depth: int = config.DEPTH,
-             categories: list = None, rerank_queries: list = None, top_n: int = config.RERANK_TOP_N,
+             categories: list = None, rerank_queries: list = None, top_n: int = None,
              weights: tuple = config.RRF_WEIGHTS) -> list:
         """Rankings (catalogue rows, best first) for a batch of queries. rerank_queries default to queries."""
         if method == "bm25":
