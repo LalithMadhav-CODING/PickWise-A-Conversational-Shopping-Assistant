@@ -38,3 +38,7 @@ node_modules/
 
 # Local-only agent instructions — not shared with collaborators
 AGENTS.md
+
+# Course materials (brief, labs, lecture notes) — kept locally, not redistributed
+/modules/
+/Project/

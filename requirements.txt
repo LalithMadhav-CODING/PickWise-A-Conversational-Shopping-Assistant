@@ -1,0 +1,29 @@
+# Data + RAG (Module 3 lab stack)
+datasets
+pandas
+pyarrow
+sentence-transformers
+faiss-cpu
+rank-bm25
+langchain-community
+langchain-text-splitters
+langchain-huggingface
+
+# Agents + harness (Module 4 lab stack)
+langgraph>=0.6
+langchain-core
+langchain-ollama
+langchain-mcp-adapters
+mcp>=1.10
+ollama
+pydantic
+
+# Fine-tuning stretch (Module 1/2)
+transformers
+accelerate
+peft
+outlines
+
+# Notebook
+matplotlib
+ipykernel
