@@ -10,6 +10,7 @@ A 4B judge grading a 4B model can be lenient with its own family's mistakes, so 
 team for a blind human label (human_check_sheet); agreement with the judge is reported once filled in.
 """
 import json
+import re
 from typing import Literal
 
 import pandas as pd
@@ -53,8 +54,11 @@ async def judge(answer: str, item_ids: list, catalogue: pd.DataFrame) -> list:
     out = await llm.ainvoke([("system", JUDGE_PROMPT),
                              ("human", f"Assistant's answer:\n{answer}\n\nProduct texts:\n\n{product_block(catalogue, item_ids)}")])
     by_number = {v.product: v for v in out.verdicts}
+
+    def claim(v):                                       # the model writes "None", "none." or "None. All claims…"
+        return "" if re.match(r"\s*(none\b|n/a\b|-|$)", v.unsupported_claim, re.I) else v.unsupported_claim
     return [{"item_id": i, "verdict": by_number[n].verdict if n in by_number else "unsupported",
-             "unsupported_claim": by_number[n].unsupported_claim if n in by_number else "(no verdict)"}
+             "unsupported_claim": claim(by_number[n]) if n in by_number else "(no verdict)"}
             for n, i in enumerate(item_ids, 1)]
 
 

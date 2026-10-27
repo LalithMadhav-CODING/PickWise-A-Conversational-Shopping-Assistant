@@ -1,7 +1,8 @@
 """End-to-end runs over many requests, cached to disk (data/runs/), so a re-run never repeats LLM calls.
 
-Each line of data/runs/<name>.jsonl is one request: {qid, picks, seconds, quotes_ok, final, timings}.
-Hit@3 = is the gold item among the 3 picks.
+Each line of data/runs/<name>.jsonl is one request: {qid, picks, seconds, quotes_ok, final, timings, details,
+query, candidates}. Hit@3 = is the gold item among the 3 picks; Recall@10 = is it among the 10 products the
+search returned (the run's own search, so both numbers describe the same turn).
 """
 import json
 import uuid
@@ -31,7 +32,8 @@ async def run_cached(name: str, run_one, qids: list, requests: list, progress: b
             rec = {"qid": qid, "picks": out["picks"], "seconds": round(out["seconds"], 2),
                    "quotes_ok": out.get("quotes_ok"), "final": out.get("final", ""),
                    "timings": {k: round(v, 3) for k, v in out.get("timings", {}).items()},
-                   "details": out.get("details", [])}
+                   "details": out.get("details", []), "query": out.get("query", ""),
+                   "candidates": out.get("candidates", [])}
             f.write(json.dumps(rec) + "\n")
             f.flush()
             done[qid] = rec
@@ -52,7 +54,8 @@ def system_runner(graph):
         return {"picks": [p["item_id"] for p in picks], "seconds": state["seconds"],
                 "quotes_ok": sum(p["quote_ok"] for p in picks), "final": state.get("final", ""),
                 "timings": state.get("timings", {}),
-                "details": [{k: p.get(k) for k in ("item_id", "reason", "quote", "quote_ok")} for p in picks]}
+                "details": [{k: p.get(k) for k in ("item_id", "reason", "quote", "quote_ok")} for p in picks],
+                "query": state.get("query", ""), "candidates": [c["item_id"] for c in state.get("candidates", [])]}
     return run_one
 
 
@@ -61,16 +64,19 @@ def react_runner(agent):
 
     async def run_one(request: str) -> dict:
         out = await run_react(agent, request, verbose=False)
-        return {"picks": out["picks"], "seconds": out["seconds"], "final": out["final"]}
+        return {"picks": out["picks"], "seconds": out["seconds"], "final": out["final"],
+                "query": out["query"], "candidates": out["candidates"]}
     return run_one
 
 
 def summarise(records: dict, golds: dict) -> dict:
-    """Hit@3, how often 3 products were named, quotes verified, and seconds per request."""
+    """Recall@10 of the run's own search, Hit@3, how often 3 products were named, quotes verified, and
+    seconds per request."""
     recs = list(records.values())
     hit = np.mean([golds[r["qid"]] in r["picks"][:3] for r in recs])
+    recall = np.mean([golds[r["qid"]] in r["candidates"][:10] for r in recs]) if all(r.get("candidates") for r in recs) else np.nan
     quotes = [r["quotes_ok"] for r in recs if r.get("quotes_ok") is not None]
-    return {"n": len(recs), "Hit@3": hit, "3 picks named": np.mean([len(r["picks"]) >= 3 for r in recs]),
+    return {"n": len(recs), "Recall@10": recall, "Hit@3": hit, "3 picks named": np.mean([len(r["picks"]) >= 3 for r in recs]),
             "quotes verified": (sum(quotes) / (3 * len(quotes))) if quotes else np.nan,
             "s / request": np.mean([r["seconds"] for r in recs]),
             "median s": np.median([r["seconds"] for r in recs])}

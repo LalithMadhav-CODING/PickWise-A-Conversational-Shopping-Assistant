@@ -692,7 +692,9 @@ async def run_react(agent, text: str, verbose: bool = True) -> dict:
     final = out["messages"][-1].content or ""
     named = [i for i in dict.fromkeys(re.findall(r"\b([A-Z0-9]{10})\b", final)) if i in seen]
     calls = [c for m in out["messages"] if isinstance(m, AIMessage) for c in m.tool_calls]
-    result = {"final": final, "picks": named[:3], "tool_calls": calls, "seconds": time.perf_counter() - t0}
+    result = {"final": final, "picks": named[:3], "tool_calls": calls, "seconds": time.perf_counter() - t0,
+              "query": calls[0]["args"].get("query", "") if calls else "",       # its first search, for Recall@10
+              "candidates": list(dict.fromkeys(seen))[:10]}
     if verbose:
         print(f"🛒 shopper: {_short(text, 200)}")
         for c in calls:
