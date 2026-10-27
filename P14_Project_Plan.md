@@ -8,8 +8,8 @@
 > **Dataset** · McAuley-Lab/Amazon-C4 (Hugging Face, public)
 > **Model** · qwen3:4b via Ollama (≤4B params, no paid APIs)
 
-> [!abstract] Where we are · updated 2026-10-27
-> Phases 0–6 built (✅ below) · Phase 8 web app ✅ (built early, during the Phase 6 run) · **Phase 7 (evaluation) next** · then **Phase 9: run on free Colab T4 / laptop CPU** (agreed order: verify every phase first, then optimise). Live progress: `CURRENT_PROJECT_STATUS.md` · every choice made without the team: `DECISION_LOG.md`.
+> [!abstract] Where we are · updated 2026-10-27 (evening)
+> Phases 0–7 done (✅ below) · Phase 8 web app ✅ · **Phase 9: run on free Colab T4 / laptop CPU — next** · talk slides + outline ready (`TALK_OUTLINE.md`). Results vs the pre-registered target: Hit@3 0.380 (missed narrowly) · vs ReAct not significant · faithfulness 59% (missed) · approvals 100% (met). Live progress: `CURRENT_PROJECT_STATUS.md` · every choice made without the team: `DECISION_LOG.md`.
 
 ---
 
@@ -49,6 +49,8 @@ Build a shopping assistant that works on **situational requests** — where keyw
 > 4. **100%** of executed `add_to_cart` calls were approved.
 >
 > Retrieval (already met, §5): the system retriever beats the best brief baseline on Recall@10 (0.548 vs 0.409, paired CI excludes 0).
+>
+> **Outcome (Phase 7, 200 test requests):** (1) Hit@3 0.380, 95% CI [0.31, 0.45]: missed narrowly · (2) vs ReAct +5.5 points [0.0, 10.5]: not met · (3) 59% judged supported (91% with partly): missed · (4) 100% approved: met.
 
 ---
 
@@ -205,23 +207,23 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 - [x] Fixes from the Phase 5 run: "which of these" only compares the products shown; unsupported "no latex" claims removed, with an honest note instead
 - [x] Avoided materials and brands filtered deterministically from the message that states them ("genuine leather" out, "faux / vegan leather" kept); the LLM router can no longer route to the cart (DECISION_LOG 6.6–6.7)
 - [x] Verification-run fixes (6.8–6.10): the avoid filter **fails closed** (searcher fetches 30 and refills; fewer than 3 picks shown rather than an avoided one; 0/15 leather picks on vegan follow-ups); rules before the LLM router for clear follow-ups (routing 14/16 → 26/26, 10 held out); reasons keep their wording when a clause is cut
-- [ ] Open for Phase 7 (6.12): need analyst can carry the last product's must-haves into a new one; a weak search still fills 3 picks
+- [x] 6.12 reviewed in Phase 7: both are multi-turn behaviours, which the first-turn evaluation can't measure; they are listed in §9 Limitations
 - **Builds on** · Module 4 · Multi_Agent_System_End_to_End (Section E) + the template's `ask()`
 - **Done when** · a clean, presentable demo flow ✅ 2026-10-27
 
-### Phase 7 — Evaluation  ⏳ next (branch `phase-7-evaluation`; choices will go in `DECISION_LOG.md` 7.x)
-- [ ] **Success target written into §1 before any test run** (see *Project Goal*)
-- [ ] **One fixed test subset**: the first 200 test requests (`QUICK_RUN`: 100), each with a fresh conversation and shopper. Retrieval metrics stay on all 800
-- [ ] **One results table**, columns Recall@10 · Hit@3 · faithful · seconds per turn:
+### Phase 7 — Evaluation  ✅ (branch `phase-7-evaluation`; choices in `DECISION_LOG.md` 7.1–7.12)
+- [x] **Success target written into §1 before any test run** (see *Project Goal*; pushed as `b1a7130` before the runs)
+- [x] **One fixed test subset**: the first 200 test requests (`QUICK_RUN`: 100), each with a fresh conversation and shopper. Retrieval metrics stay on all 800
+- [x] **One results table**, columns Recall@10 · Hit@3 · faithful · seconds per turn:
   - baselines: BM25 raw · dense raw (Hit@3 = top 3 retrieved) · **single ReAct agent** (MCP)
   - **full system** (MCP)
   - ablations: rewriting off (`build_system(rewrite=False)`) · re-ranker off (hybrid only) · MCP vs local tools (same answers, latency)
-- [x] Code: `Pickwise/judge.py` (judge + human sheet), `evaluate.py` records each pick's reason and quote, `rewrite` switch in `graph.py` *(drafted, not yet run)*
-- [ ] **Faithfulness**: verbatim-quote check on every pick + an **LLM judge** (qwen3:4b, reasoning on; each product *supported / partly / unsupported*) on the first 100, system vs ReAct + a **blind 30-row sheet for human labels** (`evaluation/human_check_faithfulness.csv`, *team task*) → judge-vs-human agreement
-- [ ] **Harness**: approval share from the audit log (must be 100%) + the adversarial cart test (Phase 5); latency MCP vs local
-- [ ] **Memory on/off**: 3 returning shoppers (avoid a brand: Nike · avoid a material: leather · prefer a brand: Columbia); count violations / adherence, after checking the catalogue has products that can violate or match
-- [ ] **Error analysis**: every miss classified (empty gold text · gold not in top 100 · ranked 11–100 · in top 10 but not picked · analyst misread) + ≥ 10 annotated examples
-- [ ] Paired bootstrap CIs for system vs ReAct and each ablation
+- [x] Code: `Pickwise/judge.py` (judge + human sheet; calibrated on planted errors, 6/6), `evaluate.py` records each pick's reason and quote and each run's own query + 10 candidates, `rewrite` switch in `graph.py`; notebook §6 / §7 / §9 cells written
+- [x] **Faithfulness**: verbatim-quote check on every pick + an **LLM judge** (qwen3:4b, reasoning on; each product *supported / partly / unsupported*) on the first 100, system vs ReAct + a **blind 30-row sheet for human labels** (`evaluation/human_check_faithfulness.csv`, *team task*) → judge-vs-human agreement
+- [x] **Harness**: approval share from the audit log (must be 100%) + the adversarial cart test (Phase 5); latency MCP vs local
+- [x] **Memory on/off**: 3 returning shoppers (avoid a brand: Nike · avoid a material: leather · prefer a brand: Columbia); count violations / adherence, after checking the catalogue has products that can violate or match
+- [x] **Error analysis**: every miss classified (empty gold text · gold not in top 100 · ranked 11–100 · in top 10 but not picked · analyst misread) + ≥ 10 annotated examples
+- [x] Paired bootstrap CIs for system vs ReAct and each ablation
 - **Compute** · ≈ 5 h on the RTX 4000 (ReAct ≈ 2.6 h, judge ≈ 1.7 h, each system variant ≈ 15 min); run in the background, cached in `data/runs/`, so the notebook re-run only reads the caches
 - **Builds on** · Module 3 (Recall@k, MRR) + spec §Evaluation
 - **Done when** · full results table + error analysis written up; success target met or the miss explained
@@ -249,10 +251,10 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 | Layer | Metric | Target | Status |
 |---|---|---|---|
 | Retrieval | Recall@10, MRR, nDCG@10 vs. gold `item_id` | beat the best brief baseline, paired CI excludes 0 | ✅ met on test (800): 0.548 / 0.360 / 0.400 vs dense raw 0.409 / 0.248 |
-| End-to-end | Hit@3 (gold among 3 recommendations) | **≥ 0.40**, and beat single ReAct (paired CI excludes 0) | ⏳ Phase 7 (dev smoke test: 0.53) |
-| Faithfulness | claims ∈ product text | **≥ 90%** judged supported; LLM judge + 30 human checks | ⏳ Phase 7 (dev: 98% verbatim quotes) |
-| Harness | % cart via approval | **100%** | ✅ 100% so far; adversarial 8/8 paused (Phase 5); re-measured in Phase 7 |
-| Harness | latency per turn | MCP vs. local | ⏳ Phase 7 (one turn ≈ 4 s on GPU) |
+| End-to-end | Hit@3 (gold among 3 recommendations) | **≥ 0.40**, and beat single ReAct (paired CI excludes 0) | ❌ 0.380 [0.31, 0.45], narrowly missed · vs ReAct +5.5 [0.0, 10.5], not met |
+| Faithfulness | claims ∈ product text | **≥ 90%** judged supported; LLM judge + 30 human checks | ❌ 59% supported (91% with partly); quotes 97% verbatim; human checks ⏳ (team) |
+| Harness | % cart via approval | **100%** | ✅ 100%; adversarial 8/8 paused |
+| Harness | latency per turn | MCP vs. local | ✅ 4.3 s vs 4.2 s per turn (MCP transport ≈ 0.03 s); ReAct 46.3 s |
 
 **Minimum standard** · ≥ 1 baseline + full system + ≥ 1 ablation, same fixed test subset, one results table, error analysis of ≥ 10 failures.
 
@@ -297,8 +299,8 @@ Title + Team + Contributions
 | M2 — Need analyst | rewriting vs. raw measured | ✅ 2026-10-26 (`main`, + model upgrade) |
 | M3 — Multi-agent + MCP | end-to-end run with trace | ✅ 2026-10-26 (`phase-4-mcp-multi-agent`) |
 | M4 — Memory + approval | multi-turn memory; 100% approval gate | ✅ 2026-10-27 (`phase-5-memory-approval`) |
-| M5 — Evaluation | results table + ≥ 10 error cases | ⏳ next (`phase-7-evaluation`) |
-| M6 — Demo + talk | clean demo; 10-min talk rehearsed | demo ✅ 2026-10-27 (`phase-6-demo`) · talk ⏳ (team) |
+| M5 — Evaluation | results table + ≥ 10 error cases | ✅ 2026-10-27 (`phase-7-evaluation`) |
+| M6 — Demo + talk | clean demo; 10-min talk rehearsed | demo ✅ · slides + outline ✅ 2026-10-27 (`TALK_OUTLINE.md`) · rehearsal ⏳ (team) |
 | M7 — Colab T4 / CPU | fresh Colab run, timed | ⏳ after M5 (Phase 9) |
 
 Phase branches are not merged into `main` yet (the team's call).
@@ -359,9 +361,9 @@ Gaps found when checking this plan against the brief (`Project/P14_Shopping_Assi
 - [x] Data downloaded with `load_dataset` at the top
 - [x] Fixed seed + subset size stated
 - [x] `ori_review` never in the index (asserted in `check_no_leakage`)
-- [ ] All required metrics reported (Recall@10, MRR, nDCG@10, Hit@3, faithfulness, approval %): retrieval ✅, the rest in Phase 7
-- [ ] All notebook sections present: headings ✅; §6 Evaluation, §7 Error Analysis, §9 Limitations still placeholders (Phase 7); team table empty
-- [ ] ≥ 10 failure cases in error analysis (Phase 7)
+- [x] All required metrics reported (Recall@10, MRR, nDCG@10, Hit@3, faithfulness, approval %, latency MCP vs local)
+- [ ] All notebook sections present: ✅ all filled; **team table still empty (team)**
+- [x] ≥ 10 failure cases in error analysis (all 124 misses categorised; annotated examples per category)
 - [x] `add_to_cart` 100% through approval (Phase 5: 100% approval share, adversarial 8/8 paused; re-checked in Phase 7)
 - [x] ≤ 4B params, no paid APIs (qwen3:4b · BLaIR 0.1B · Qwen3-Reranker 0.6B · all local)
 - [x] Each part cites the lab it builds on ("Builds on" lines in §2–§5; §8 cites Module 4 Section E); §6–§7 to add in Phase 7

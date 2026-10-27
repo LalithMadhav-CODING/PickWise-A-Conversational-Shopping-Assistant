@@ -15,7 +15,7 @@ Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_P
 | 4 — MCP Server + Multi-Agent | ✅ done 2026-10-26 (branch `phase-4-mcp-multi-agent`) |
 | 5 — Memory + Human-in-the-Loop | ✅ done 2026-10-27 (branch `phase-5-memory-approval`) |
 | 6 — Demo Cell | ✅ done 2026-10-27 (branch `phase-6-demo`) |
-| 7 — Evaluation | ⚪ next (code drafted: `Pickwise/judge.py`, eval cells) |
+| 7 — Evaluation | ✅ done 2026-10-27 (branch `phase-7-evaluation`): target pre-registered (`b1a7130`) before the runs |
 | 8 — Stretch Goals | 🟡 web app ✅ 2026-10-27 (branch `phase-8-app`), BLaIR ✅, LoRA ⚪ |
 | 9 — Colab T4 / CPU | ⚪ after Phase 7 (agreed order) |
 
@@ -293,6 +293,22 @@ Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (8.1–8.8). Built while the
   - Routing test: **34/34** in both contexts (8 new cases).
   - Second try-out: "more details on **arulis**" re-ranked all three (one word isn't a 3-word title match). Now a word only one title has names it (its first word, usually the brand, always; other words like "the shark" when asking for details), and "more details" with no product named asks which one (8.13).
 - [x] Tested through the app's own HTTP API: **24/24 checks** (16 + 8 for the reported cases); before the fixes: **16/16 checks**: streaming, vegan filter, approve button, typed "no", MCP→local mid-conversation, memory across conversations, forget, two shoppers in two sessions. First reply 4.1 s (graph built when the page opens; was 14.2 s). Browser screenshots (desktop + phone) checked the layout; fixed the trace wrapping, a duplicated cart question and squeezed table columns.
+
+## Phase 7 — Evaluation ✅ (branch `phase-7-evaluation`)
+
+Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (7.1–7.8), **written and pushed before any test request ran** (`b1a7130`).
+
+- [x] Success target in notebook §1: Hit@3 ≥ 0.40; beat single ReAct (paired CI excluding 0); ≥ 90% judged supported; 100% approval.
+- [x] Runs record their own query + 10 candidates, so Recall@10 and the error categories are exact.
+- [x] Judge calibrated on planted errors: 6/6.
+- [x] Memory test redesigned so each preference can matter (catalogue check: few Nike / Columbia products).
+- [x] Notebook §6 / §7 / §9 cells written; §8 demo now also asks a one-product question (the remaining Phase 6 item).
+- [x] Background runs, one after another, 13:34–18:38: four system variants (≈ 13 min each), ReAct (2 h 34 min), judge (1 h 36 min). No errors.
+- [x] Full notebook re-run with the evaluation, error analysis and limitations; findings written.
+- [x] **Results vs the target:** Hit@3 0.380 [0.31, 0.45], missed narrowly · vs ReAct +5.5 [0.0, 10.5], not met · judged supported 0.59 (0.91 with partly), missed · approvals 100%, met. Full table in the README.
+- [x] Found before the notebook ran: the error categories counted title-only products as "empty text" (86 instead of 1). Fixed; "title only" is now a separate flag (DECISION_LOG 7.10).
+- [x] Talk slides + `TALK_OUTLINE.md` with the final numbers.
+- [ ] **Team:** fill `evaluation/human_check_faithfulness.csv` (30 rows, blind to the judge).
 
 ## Findings / notes
 

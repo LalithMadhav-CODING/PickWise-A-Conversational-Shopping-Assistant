@@ -46,7 +46,7 @@ Memory: checkpointer (this conversation) + Store (shopper preferences: brands, m
 - **Catalogue**: the 998 gold products + 31,616 random distractors from the 1.06M-item metadata file → **32,614 products**
 - The index uses product text only. `ori_review` (the review each query was written from) is **never** indexed, and the notebook asserts this.
 
-## Results so far
+## Results
 
 Retrieval on the fixed **800-query test subset** (one gold product per request, catalogue of 32,614 products):
 
@@ -74,7 +74,29 @@ Retrieval on the fixed **800-query test subset** (one gold product per request, 
 - Using the predicted category as a filter halves recall (category accuracy is about 43–52%), so it isn't applied automatically.
 - The need analyst runs with Qwen3's reasoning **off**. On dev it's 28× faster than with reasoning on (1.1 s vs 30.7 s per request), with no measurable retrieval loss.
 
-**The assistant end to end (Phase 4 smoke test, 30 dev requests):** the right product is among the 3 recommendations for **53%** of requests, in **4.2 s** per request, and **98%** of the quoted evidence appears word for word in the product text. The single-ReAct-agent baseline reaches 47% in 47 s. This is a smoke test; the evaluation on the test subset comes in Phase 7.
+**End to end (Phase 7, the first 200 test requests, each answered from scratch with a fresh shopper):**
+
+| Condition | Recall@10 | Hit@3 | Faithful (judge) | s / turn |
+|---|---|---|---|---|
+| BM25 · raw request | 0.070 | 0.040 | — | — |
+| Dense (bge-small) · raw request | 0.360 | 0.235 | — | — |
+| Dense (BLaIR) · raw request | 0.540 | 0.350 | — | — |
+| Single ReAct agent (MCP) | 0.460 | 0.325 | 0.561 | 46.3 |
+| **Full system (MCP)** | **0.495** | **0.380** | **0.590** | **4.3** |
+| − rewriting | 0.535 | 0.370 | — | 3.6 |
+| − re-ranker | 0.390 | 0.285 | — | 3.8 |
+| − comparator (the search's own top 3) | 0.495 | 0.385 | — | — |
+| in-process tools instead of MCP | 0.490 | 0.380 | — | 4.2 |
+
+Against the success target written down before these runs (`DECISION_LOG.md` 7.1):
+- **Hit@3 ≥ 0.40: missed narrowly**, 0.380 with a 95% CI of [0.31, 0.45].
+- **Beat the single ReAct agent: not met.** It is ahead by 5.5 points, but the paired CI is [0.0, 10.5] (McNemar p = 0.07). It is also 11× faster.
+- **≥ 90% judged supported: missed.** 59% of recommendations are fully supported, and 91% are supported or partly. The quotes are verbatim (97%), but the sentence around a quote often states the shopper's wish as a product fact.
+- **100% of executed adds approved: met.**
+
+Ablations: the re-ranker is the only part whose removal clearly hurts (−9.5 points Hit@3, CI [4.5, 14.5]). Rewriting, the comparator and MCP make no measurable difference to Hit@3. MCP adds about 0.03 s per turn. Memory on/off with 3 returning shoppers: avoided-brand and avoided-material picks fall from 2 and 3 to 0, and preferred-brand picks rise from 2 to 3.
+
+Error analysis: 100 of the 124 misses happen before the comparator. 57 were never retrieved and 43 were ranked 11–100. Two thirds of the gold products have only a title (43% of the catalogue).
 
 **Memory and approval (Phase 5):** Pickwise remembers each shopper's lasting preferences across conversations (e.g. *avoid latex, never Munchkin*). Products naming an avoided brand or material are filtered out of the results (never handed back, even when few remain), and **every add-to-cart pauses for the shopper's yes**: 8 out of 8 attempts to skip approval paused, and nothing was added without approval.
 
@@ -106,7 +128,7 @@ Baselines: BM25 and dense retrieval on the raw request, and a single ReAct agent
 | 4 — MCP server + multi-agent | ✅ (branch `phase-4-mcp-multi-agent`) |
 | 5 — Memory + human approval | ✅ (branch `phase-5-memory-approval`) |
 | 6 — Demo | ✅ (branch `phase-6-demo`) |
-| 7 — Evaluation | ⏳ next |
+| 7 — Evaluation | ✅ (branch `phase-7-evaluation`) |
 | 8 — Stretch: web app ✅ (branch `phase-8-app`), BLaIR embedder ✅, LoRA need analyst ⚪ | 🟡 |
 | 9 — Colab T4 / CPU | ⚪ after Phase 7 |
 
