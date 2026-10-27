@@ -1,54 +1,73 @@
-"""Phase 4: the multi-agent system. Adapted from Module 4 · Agentic_app (graph.py) and
-Multi_Agent_System_End_to_End (Sections B, C, F).
+"""Phases 4-5: the multi-agent system, with memory and human approval. Adapted from Module 4 ·
+Agentic_app (graph.py) and Multi_Agent_System_End_to_End (Sections B-F).
 
-    shopper ──► Supervisor ──► Need analyst ──► Searcher ──► Comparator ──► END
-                    │             (LLM)          (tool)        (LLM)
-                    ├──────────────────────────────────────►  Comparator   a question about products already shown
-                    └──► Cart                                               Phase 5: approval before add_to_cart
+    shopper ──► remember ──► Supervisor ──► Need analyst ──► Searcher ──► Comparator ──► END
+                (Store)          │             (LLM)          (tool)        (LLM)
+                                 ├──────────────────────────────────────►  Comparator   a question about the products shown
+                                 └──► Cart ──► Approval ──► END                         interrupt(): the shopper says yes or no
+    Memory: checkpointer = this conversation (thread_id) · Store = shopper preferences (user_id)
 
-- Supervisor: LLM-as-router with structured output (reasoning off), backed by a rule: with no products
-  shown yet, a turn is always a search (as in the lab, rules back up the LLM where a small model is unreliable).
-- Need analyst: need.aanalyse, structured output, reasoning off (Phase 3).
-- Searcher: a tool node, no LLM. It calls search_products over MCP or in-process with the need analyst's
-  query (rewrite + request): exactly the retriever that was evaluated.
-- Comparator: structured output, reasoning off (dev smoke test: same Hit@3, 14x faster, more faithful
-  quotes; DECISION_LOG 4.15). It picks 3 products by item_id (a Literal of the candidates'
-  ids, so it cannot name a product it was not shown), each with a reason and a quote copied from that
-  product's text. Every quote is checked against the text.
+- remember: extracts lasting preferences from each message into the Store (memory.py); every later turn
+  and conversation of the same shopper reads them.
+- Supervisor: no products shown yet -> search (rule); a cart word in the LAST message -> cart (rule: as in
+  the lab, the decision that leads to a high-risk action is a rule); otherwise an LLM router (structured
+  output, reasoning off) chooses search / compare / cart.
+- Need analyst: need.aanalyse, structured output, reasoning off, with the remembered preferences.
+- Searcher: a tool node, no LLM: search_products over MCP or in-process with the need analyst's query.
+- Comparator: structured output, reasoning off (DECISION_LOG 4.15): 3 picks by item_id (a Literal of the
+  candidates' ids), each with a reason and a quote that is checked against the product text.
+- Cart -> Approval: the cart node only works out WHICH product; the approval node pauses with interrupt()
+  and runs add_to_cart only on an explicit yes. Two nodes, because a node re-runs from its start when the
+  graph resumes: the LLM's choice of product must not be re-made after the shopper has seen it.
 
 build_react_baseline() is the brief's single-ReAct-agent baseline: one agent, one search tool.
 """
 import json
 import re
 import time
+import uuid
 from typing import Literal
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
-from langgraph.types import Command
+from langgraph.store.base import BaseStore
+from langgraph.store.memory import InMemoryStore
+from langgraph.types import Command, interrupt
 from pydantic import BaseModel, Field, create_model
 
-from . import config
+from . import cart as shop_cart
+from . import config, memory
 from .llm import ainvoke_requiring_tool, get_llm
 from .need import aanalyse, search_query
 from .tools import get_tools, tool_text
+
+config_module = config     # LangGraph passes nodes a `config` argument, which hides the settings module
 
 
 # ================================================================== shared state
 class ShopState(MessagesState):
     route: str            # the supervisor's choice for this turn
+    preferences: dict     # what the Store remembered about this shopper BEFORE this message (used this turn)
+    learned: dict         # preferences learned from this message (stored for later turns)
     need: dict            # need analyst output
     query: str            # what the searcher sent to the catalogue
     candidates: list      # products the searcher found: [{item_id, title, category, text}]
     picks: list           # comparator's 3 picks: [{item_id, title, reason, quote, quote_ok}]
+    dropped: int          # candidates removed because their brand is one the shopper avoids
+    pending: dict         # the cart action waiting for the shopper's approval
+    cart_status: str      # "", "added", "rejected", "unclear"
     final: str            # the reply to the shopper
     timings: dict         # seconds per step, for the trace and the latency study
 
 
 def new_turn(text: str) -> dict:
-    """Input for one shopper turn: the new message, with the per-turn fields reset."""
-    return {"messages": [HumanMessage(text)], "route": "", "final": "", "timings": {}}
+    """Input for one shopper turn: the new message, with the per-turn fields reset. Products shown and
+    picks stay in the conversation's checkpoint, so 'the second one' still means something next turn."""
+    return {"messages": [HumanMessage(text)], "route": "", "final": "", "timings": {}, "pending": {},
+            "cart_status": ""}
 
 
 def last_user_message(state) -> str:
@@ -69,6 +88,10 @@ def quote_in_text(quote: str, text: str) -> bool:
     """Is the comparator's quote really in the product text? (punctuation and case ignored)"""
     q = normalise(quote)
     return len(q) >= 3 and q in normalise(text)
+
+
+def user_of(cfg) -> str:
+    return cfg.get("configurable", {}).get("user_id", "anonymous")
 
 
 # ================================================================== the comparator's output schema
@@ -95,9 +118,28 @@ def format_candidates(candidates: list) -> str:
     return "\n\n".join(f"[{c['item_id']}] {c['title']} (category: {c['category']})\n{c['text']}" for c in candidates)
 
 
-def render(picks: list, need: dict) -> str:
+def first_sentence(text: str, limit: int = 300) -> str:
+    """The comparator is asked for ONE sentence; a 4B model sometimes keeps 'thinking aloud' inside the JSON
+    string ('Wait, let me re-read...'). Keep the first sentence only."""
+    sentence = re.split(r"(?<=[.!?])\s+", text.strip(), maxsplit=1)[0]
+    return sentence if len(sentence) <= limit else sentence[:limit - 1].rsplit(" ", 1)[0] + "…"
+
+
+def drop_avoided_brands(candidates: list, brands: list) -> tuple:
+    """Remove products whose title names a brand the shopper avoids (kept if that would leave < 3)."""
+    if not brands:
+        return candidates, 0
+    pattern = re.compile(r"\b(" + "|".join(re.escape(b) for b in brands) + r")\b", re.I)
+    kept = [c for c in candidates if not pattern.search(c["title"])]
+    return (kept, len(candidates) - len(kept)) if len(kept) >= 3 else (candidates, 0)
+
+
+def render(picks: list, need: dict, question: str = None) -> str:
     what = need.get("product_type") if need else None
-    lines = [f"Here are my top {len(picks)} picks" + (f" (searched for: {what}):" if what else ":")]
+    if question:
+        lines = [f'On your question "{question.strip()}", here is how the products compare, best first:']
+    else:
+        lines = [f"Here are my top {len(picks)} picks" + (f" (searched for: {what}):" if what else ":")]
     for i, p in enumerate(picks, 1):
         title = p["title"] if len(p["title"]) <= 100 else p["title"][:97] + "…"
         lines.append(f"{i}. {title}\n   {p['reason']}")
@@ -115,26 +157,62 @@ class Route(BaseModel):
         "cart: the shopper wants to buy or add a shown product to the cart."))
 
 
-async def build_system(via: str = "mcp", comparator_reasoning: bool = False, checkpointer=None, store=None):
-    """Assemble the multi-agent graph with its tools taken from the MCP server (via='mcp') or in-process."""
+CART_WORDS = re.compile(r"\b(add|cart|basket|buy|order|purchase|checkout|get me)\b", re.I)
+ORDINALS = {1: r"\b(first|1st|number one|#1|option 1|no\.? ?1)\b", 2: r"\b(second|2nd|number two|#2|option 2|no\.? ?2)\b",
+            3: r"\b(third|3rd|number three|#3|option 3|no\.? ?3)\b"}
+
+
+class CartChoice(BaseModel):
+    position: Literal[0, 1, 2, 3] = Field(description="which recommended product (1, 2 or 3) the shopper wants added; 0 if unclear")
+    quantity: int = Field(default=1, ge=1, le=20, description="how many; 1 unless the shopper says otherwise")
+
+
+async def build_system(via: str = "mcp", comparator_reasoning: bool = False, memory_on: bool = True,
+                       checkpointer=None, store=None):
+    """Assemble the multi-agent graph. via: tools from the MCP server ('mcp') or in-process ('local').
+    memory_on=False skips the Store (the memory on/off ablation)."""
     tools = await get_tools(via)
     search_tool = tools["search_products"]
     router = get_llm(reasoning=False).with_structured_output(Route)
     comparator_llm = get_llm(reasoning=comparator_reasoning)
+    cart_resolver = get_llm(reasoning=False).with_structured_output(CartChoice)
+
+    async def remember(state: ShopState, config: RunnableConfig, *, store: BaseStore):
+        """Load what is remembered (used this turn) and store what this message adds (used from the next turn
+        on: the current message is already in front of the agents, and a one-message request then behaves
+        exactly like the evaluated pipeline)."""
+        t = time.perf_counter()
+        prefs, learned = {}, {}
+        if memory_on:
+            user, text = user_of(config), last_user_message(state)
+            prefs = memory.load(store, user)
+            if memory.has_cue(text):
+                try:
+                    updated = memory.merge(prefs, await memory.extract(text), text)
+                    learned = {k: v for k, v in updated.items() if v and v != prefs.get(k)}
+                    if learned:
+                        memory.save(store, user, updated)
+                except Exception:                           # a failed extraction never blocks the turn
+                    pass
+        return {"preferences": prefs, "learned": learned,
+                "timings": {**state["timings"], "remember": time.perf_counter() - t}}
 
     async def supervisor(state: ShopState) -> Command:
         t = time.perf_counter()
+        text = last_user_message(state)
         if not state.get("candidates"):
             route, why = "search", "rule: no products shown yet"
+        elif state.get("picks") and CART_WORDS.search(text):
+            route, why = "cart", "rule: cart word in the last message"
         else:
             decision = await router.ainvoke(
                 "You route a shopper's message to the right step of a shopping assistant.\n"
                 f"{Route.model_fields['next'].description}\n\n"
                 f"Conversation so far:\n{conversation(state)}\n\n"
-                f"LAST shopper message: {last_user_message(state)}\n\nChoose the step for the LAST message only.")
+                f"LAST shopper message: {text}\n\nChoose the step for the LAST message only.")
             route, why = decision.next, "LLM router"
         node = {"search": "need_analyst", "compare": "comparator", "cart": "cart"}[route]
-        timings = {**state.get("timings", {}), "supervisor": time.perf_counter() - t}
+        timings = {**state["timings"], "supervisor": time.perf_counter() - t}
         return Command(goto=node, update={"route": f"{route} ({why})", "timings": timings})
 
     async def need_analyst(state: ShopState):
@@ -142,6 +220,9 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, che
         text = last_user_message(state)
         earlier = conversation(state, last_n=6) if len(state["messages"]) > 1 else ""
         request = f"Earlier conversation:\n{earlier}\n\nLatest request: {text}" if earlier else text
+        remembered = memory.describe(state.get("preferences") or {}, negatives=False)   # avoidances: comparator
+        if remembered:
+            request += f"\n\nRemembered shopper preferences: {remembered}"
         try:
             analysed = await aanalyse(request)
             need, query = analysed.model_dump(), search_query(analysed, text)
@@ -159,18 +240,27 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, che
 
     async def comparator(state: ShopState):
         t = time.perf_counter()
-        candidates = state["candidates"]
+        prefs = state.get("preferences") or {}
+        candidates, dropped = drop_avoided_brands(state["candidates"], prefs.get("avoid_brands", []))
         by_id = {c["item_id"]: c for c in candidates}
+        request = f"Shopper's request: {last_user_message(state)}"
+        if len(state["messages"]) > 1:                      # a follow-up: give the conversation as context
+            request += f"\n\nConversation so far:\n{conversation(state)}"
+        remembered = memory.describe(prefs)
+        if remembered:
+            request += (f"\n\nRemembered shopper preferences: {remembered}. Respect them: prefer liked brands "
+                        "and avoid products whose text shows something the shopper must avoid. A product's text "
+                        "not mentioning something does NOT show that the product avoids it: never claim that.")
         prompt = [SystemMessage(COMPARATOR_PROMPT),
-                  HumanMessage(f"Shopper's request: {last_user_message(state)}\n\nCandidate products:\n\n"
-                               f"{format_candidates(candidates)}")]
+                  HumanMessage(f"{request}\n\nCandidate products:\n\n{format_candidates(candidates)}")]
         picks = []
         try:
             out = await comparator_llm.with_structured_output(
                 recommendation_schema(list(by_id))).ainvoke(prompt)
             for p in out.picks:
                 if p.item_id in by_id and p.item_id not in {x["item_id"] for x in picks}:
-                    picks.append({"item_id": p.item_id, "title": by_id[p.item_id]["title"], "reason": p.reason,
+                    picks.append({"item_id": p.item_id, "title": by_id[p.item_id]["title"],
+                                  "reason": first_sentence(p.reason),
                                   "quote": p.quote, "quote_ok": quote_in_text(p.quote, by_id[p.item_id]["text"])})
         except Exception:
             pass                                            # an invalid reply falls back to the search order
@@ -180,28 +270,71 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, che
             if c["item_id"] not in {x["item_id"] for x in picks}:
                 picks.append({"item_id": c["item_id"], "title": c["title"], "quote": "", "quote_ok": False,
                               "reason": "One of the closest matches to your request in the catalogue."})
-        final = render(picks, state.get("need"))
-        return {"picks": picks, "final": final, "messages": [AIMessage(final)],
+        question = last_user_message(state) if state.get("route", "").startswith("compare") else None
+        final = render(picks, state.get("need"), question)
+        return {"picks": picks, "final": final, "messages": [AIMessage(final)], "dropped": dropped,
                 "timings": {**state["timings"], "comparator": time.perf_counter() - t}}
 
-    async def cart(state: ShopState):
-        final = "Adding to the cart needs your approval first; that step is built in Phase 5."
-        return {"final": final, "messages": [AIMessage(final)]}
+    async def cart(state: ShopState, config: RunnableConfig) -> Command:
+        """Work out WHICH shown product the shopper wants; never touches the cart itself."""
+        t = time.perf_counter()
+        text, picks = last_user_message(state), state.get("picks") or []
+        position = next((n for n, pattern in ORDINALS.items() if re.search(pattern, text, re.I)), 0)
+        quantity = 1
+        if not position and picks:
+            numbered = "\n".join(f"{i}. {p['title']}" for i, p in enumerate(picks, 1))
+            try:
+                choice = await cart_resolver.ainvoke(
+                    f"The assistant recommended:\n{numbered}\n\nConversation so far:\n{conversation(state)}\n\n"
+                    f"LAST shopper message: {text}\n\nWhich recommended product (1-{len(picks)}) does the shopper "
+                    "want added to the cart, and how many? Answer 0 if it is not clear.")
+                position, quantity = choice.position, choice.quantity
+            except Exception:
+                position = 0
+        timings = {**state["timings"], "cart": time.perf_counter() - t}
+        if not picks or not 1 <= position <= len(picks):
+            final = ("Which one should I add: 1, 2 or 3?" if picks
+                     else "There is nothing to add yet. Tell me what you are looking for first.")
+            return Command(goto=END, update={"final": final, "messages": [AIMessage(final)],
+                                             "cart_status": "unclear", "timings": timings})
+        pick = picks[position - 1]
+        draft = {"tool": "add_to_cart", "user_id": user_of(config), "item_id": pick["item_id"],
+                 "title": pick["title"], "quantity": quantity}
+        return Command(goto="approval", update={"pending": draft, "timings": timings})
+
+    async def approval(state: ShopState, config: RunnableConfig):
+        """Human-in-the-loop: pause before the high-risk tool and wait for the shopper's decision."""
+        draft = state["pending"]
+        assert draft["tool"] in config_module.RISKY_TOOLS
+        decision = interrupt(draft)                         # <-- the graph pauses here until resumed
+        approved = shop_cart.is_approval(decision)
+        if approved:
+            final = shop_cart.add_to_cart(draft["user_id"], draft["item_id"], draft["title"], draft["quantity"],
+                                          approved=True)
+        else:
+            final = f"OK, I did not add {draft['title']} to your cart."
+        shop_cart.record(draft, decision, config.get("configurable", {}).get("thread_id", ""), executed=approved)
+        return {"final": final, "messages": [AIMessage(final)], "pending": {},
+                "cart_status": "added" if approved else "rejected"}
 
     g = StateGraph(ShopState)
+    g.add_node("remember", remember)
     g.add_node("supervisor", supervisor, destinations=("need_analyst", "comparator", "cart"))
     g.add_node("need_analyst", need_analyst)
     g.add_node("searcher", searcher)
     g.add_node("comparator", comparator)
-    g.add_node("cart", cart)
-    g.add_edge(START, "supervisor")
+    g.add_node("cart", cart, destinations=("approval", END))
+    g.add_node("approval", approval)
+    g.add_edge(START, "remember")
+    g.add_edge("remember", "supervisor")
     g.add_edge("need_analyst", "searcher")
     g.add_edge("searcher", "comparator")
     g.add_edge("comparator", END)
-    g.add_edge("cart", END)
-    graph = g.compile(checkpointer=checkpointer, store=store)
-    graph.via, graph.comparator_reasoning = via, comparator_reasoning
+    g.add_edge("approval", END)
+    graph = g.compile(checkpointer=checkpointer or InMemorySaver(), store=store or InMemoryStore())
+    graph.via, graph.comparator_reasoning, graph.memory_on = via, comparator_reasoning, memory_on
     return graph
+
 
 
 # ================================================================== running a turn, with a trace
@@ -210,40 +343,76 @@ def _short(text: str, n: int = 110) -> str:
     return text if len(text) <= n else text[:n - 1] + "…"
 
 
-async def run_turn(graph, text: str, cfg: dict = None, verbose: bool = True) -> dict:
-    """Run one shopper turn and print a trace of every agent step and tool call as it happens."""
-    state, t0 = dict(new_turn(text)), time.perf_counter()
-    if verbose:
-        print(f"🛒 shopper: {_short(text, 200)}")
-    async for update in graph.astream(new_turn(text), cfg or {}, stream_mode="updates"):
+def _print_step(graph, node: str, delta: dict, state: dict) -> None:
+    s = state.get("timings", {}).get(node, 0.0)
+    if node == "remember":
+        remembered = memory.describe(delta.get("preferences") or {})
+        learned = memory.describe({**memory.EMPTY, **(delta.get("learned") or {})})
+        print(f"  [remember]     using: {remembered or 'nothing on record'}"
+              f"{' · learned: ' + learned if learned else ''}  ({s:.1f}s)")
+    elif node == "supervisor":
+        print(f"  [supervisor]   → {delta['route']}  ({s:.1f}s)")
+    elif node == "need_analyst":
+        n = delta["need"]
+        print(f"  [need_analyst] {n.get('product_type')!r} · must-haves {n.get('must_haves')} · "
+              f"category {n.get('category')}  ({s:.1f}s)" if n else f"  [need_analyst] failed → raw request ({s:.1f}s)")
+    elif node == "searcher":
+        print(f"  [searcher]     search_products(query={_short(state['query'], 80)!r}, k={config.N_CANDIDATES}) "
+              f"via {graph.via.upper()} → {len(delta['candidates'])} products  "
+              f"(call {s:.2f}s, of which search {state['timings']['search_compute']:.2f}s)")
+    elif node == "comparator":
+        ok = sum(p["quote_ok"] for p in delta["picks"])
+        dropped = f" · removed {delta['dropped']} from avoided brands" if delta.get("dropped") else ""
+        print(f"  [comparator]   picks {[p['item_id'] for p in delta['picks']]} · "
+              f"quotes found in product text {ok}/{len(delta['picks'])}{dropped}  ({s:.1f}s)")
+    elif node == "cart":
+        d = delta.get("pending")
+        print(f"  [cart]         {'wants ' + str(d['quantity']) + ' × ' + _short(d['title'], 60) if d else 'unclear which product'}  ({s:.1f}s)")
+    elif node == "approval":
+        print(f"  [approval]     {'✅ approved → add_to_cart executed' if delta.get('cart_status') == 'added' else '❌ not approved → cart unchanged'}")
+    else:
+        print(f"  [{node}]")
+
+
+async def _stream(graph, graph_input, cfg: dict, verbose: bool, t0: float) -> dict:
+    """Stream one turn (or a resume), printing each step; return the conversation state afterwards."""
+    waiting, running = None, dict((await graph.aget_state(cfg)).values)
+    async for update in graph.astream(graph_input, cfg, stream_mode="updates"):
         for node, delta in update.items():
-            if not isinstance(delta, dict):
-                continue
-            state.update(delta)
-            s = state.get("timings", {}).get(node, 0.0)
-            if not verbose:
-                continue
-            if node == "supervisor":
-                print(f"  [supervisor]   → {delta['route']}  ({s:.1f}s)")
-            elif node == "need_analyst":
-                n = delta["need"]
-                print(f"  [need_analyst] {n.get('product_type')!r} · must-haves {n.get('must_haves')} · "
-                      f"category {n.get('category')}  ({s:.1f}s)" if n else f"  [need_analyst] failed → raw request ({s:.1f}s)")
-            elif node == "searcher":
-                ids = [c["item_id"] for c in delta["candidates"]]
-                print(f"  [searcher]     search_products(query={_short(state['query'], 80)!r}, k={config.N_CANDIDATES}) "
-                      f"via {graph.via.upper()} → {len(ids)} products  "
-                      f"(call {s:.2f}s, of which search {state['timings']['search_compute']:.2f}s)")
-            elif node == "comparator":
-                ok = sum(p["quote_ok"] for p in delta["picks"])
-                print(f"  [comparator]   picks {[p['item_id'] for p in delta['picks']]} · "
-                      f"quotes found in product text {ok}/{len(delta['picks'])}  ({s:.1f}s)")
-            else:
-                print(f"  [{node}]")
-    state["seconds"] = time.perf_counter() - t0
-    if verbose:
+            if node == "__interrupt__":
+                waiting = delta[0].value
+                if verbose:
+                    print(f"  ⏸  waiting for the shopper: add {waiting['quantity']} × {_short(waiting['title'], 70)} "
+                          "to the cart? (approve / reject)")
+            elif isinstance(delta, dict):
+                running.update(delta)
+                if verbose:
+                    _print_step(graph, node, delta, running)
+    state = dict((await graph.aget_state(cfg)).values)
+    state.update(waiting_for_approval=waiting, cfg=cfg, seconds=time.perf_counter() - t0)
+    if verbose and not waiting:
         print(f"\n🤖 Pickwise ({state['seconds']:.1f}s):\n{state.get('final', '')}\n")
     return state
+
+
+async def run_turn(graph, text: str, cfg: dict = None, verbose: bool = True) -> dict:
+    """Run one shopper turn and print a trace of every agent step and tool call as it happens.
+    cfg = {"configurable": {"thread_id": conversation, "user_id": shopper}}; a missing thread_id starts a
+    new conversation. If the turn pauses for approval, state['waiting_for_approval'] holds the action:
+    continue with resume(graph, "approve" | "reject", state['cfg'])."""
+    cfg = cfg or {}
+    configurable = {"thread_id": f"t-{uuid.uuid4().hex[:8]}", "user_id": "anonymous", **cfg.get("configurable", {})}
+    cfg = {**cfg, "configurable": configurable, "recursion_limit": config.RECURSION_LIMIT}
+    if verbose:
+        print(f"🛒 shopper ({configurable['user_id']}): {_short(text, 200)}")
+    return await _stream(graph, new_turn(text), cfg, verbose, time.perf_counter())
+
+
+async def resume(graph, decision: str, cfg: dict, verbose: bool = True) -> dict:
+    """Give the shopper's decision on a paused cart action and finish the turn."""
+    if verbose:
+        print(f"🛒 shopper decides: {decision}")
+    return await _stream(graph, Command(resume=decision), cfg, verbose, time.perf_counter())
 
 
 # ================================================================== baseline: a single ReAct agent

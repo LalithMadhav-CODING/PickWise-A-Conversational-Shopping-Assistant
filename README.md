@@ -82,6 +82,8 @@ Retrieval on the fixed **800-query test subset** (one gold product per request, 
 
 **The assistant end to end (Phase 4 smoke test, 30 dev requests):** the right product is among the 3 recommendations for **53%** of requests, in **4.2 s** per request, and **98%** of the quoted evidence appears word for word in the product text. The single-ReAct-agent baseline reaches 47% in 47 s. This is a smoke test; the evaluation on the test subset comes in Phase 7.
 
+**Memory and approval (Phase 5):** Pickwise remembers each shopper's lasting preferences across conversations (e.g. *avoid latex, never Munchkin*). Avoided brands are filtered out of the results, and **every add-to-cart pauses for the shopper's yes**: 8 out of 8 attempts to skip approval paused, and nothing was added without approval.
+
 All choices were made on the 200 dev queries; test was scored once. Details: notebook §4–5b and [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md).
 
 ## Evaluation plan
@@ -104,8 +106,8 @@ Baselines: BM25 and dense retrieval on the raw request, and a single ReAct agent
 | 2 — Retrieval (RAG) | ✅ |
 | 3 — Need analyst | ✅ |
 | 4 — MCP server + multi-agent | ✅ (branch `phase-4-mcp-multi-agent`) |
-| 5 — Memory + human approval | ⏳ next |
-| 6 — Demo | ⚪ |
+| 5 — Memory + human approval | ✅ (branch `phase-5-memory-approval`) |
+| 6 — Demo | ⏳ next |
 | 7 — Evaluation | ⚪ |
 | 8 — Stretch (Streamlit app, BLaIR embedder, LoRA need analyst) | ⚪ |
 
@@ -161,6 +163,8 @@ Pickwise/                      reusable code imported by the notebook, MCP serve
   tools.py                     the tools via MCP or in-process; starts the server when needed
   graph.py                     LangGraph supervisor → need analyst → searcher → comparator; ReAct baseline
   evaluate.py                  cached end-to-end runs, Hit@3
+  memory.py                    long-term memory: shopper preferences in the LangGraph Store
+  cart.py                      add_to_cart (only after approval) + audit log
 requirements.txt
 run_notebook.py                runs the notebook top to bottom with a live per-cell log
 P14_Project_Plan.md            build plan, risks, open issues

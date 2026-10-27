@@ -4,6 +4,7 @@ Each line of data/runs/<name>.jsonl is one request: {qid, picks, seconds, quotes
 Hit@3 = is the gold item among the 3 picks.
 """
 import json
+import uuid
 
 import numpy as np
 
@@ -43,7 +44,9 @@ def system_runner(graph):
     from .graph import run_turn
 
     async def run_one(request: str) -> dict:
-        state = await run_turn(graph, request, verbose=False)
+        # a fresh conversation AND a fresh shopper per request: nothing remembered leaks between requests
+        shopper = f"eval-{uuid.uuid4().hex[:8]}"
+        state = await run_turn(graph, request, {"configurable": {"user_id": shopper}}, verbose=False)
         picks = state.get("picks", [])
         return {"picks": [p["item_id"] for p in picks], "seconds": state["seconds"],
                 "quotes_ok": sum(p["quote_ok"] for p in picks), "final": state.get("final", ""),

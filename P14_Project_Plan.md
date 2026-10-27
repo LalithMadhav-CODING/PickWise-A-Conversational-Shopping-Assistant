@@ -185,13 +185,14 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 - **Builds on** · Module 4 · Multi_Agent_System_End_to_End + MCP_Server_and_Tools_Lab + Agentic_app
 - **Done when** · end-to-end run with a printed trace of every agent step + tool call ✅ 2026-10-26
 
-### Phase 5 — Memory + Human-in-the-Loop  →  *Module 4*
-- [ ] **Checkpointer** (short-term, per `thread_id`) — follow-ups resolve ("that one")
-- [ ] **Store** (long-term, per `user_id`) — brands, budget, dislikes
-- [ ] `add_to_cart` in `RISKY_TOOLS`; `interrupt()` before it
-- [ ] Recursion limit + step tracing
+### Phase 5 — Memory + Human-in-the-Loop  →  *Module 4*  ✅ (branch `phase-5-memory-approval`; choices in `DECISION_LOG.md` 5.1–5.16)
+- [x] **Checkpointer** (short-term, per `thread_id`): follow-ups resolve ("the second one", "which of these is easiest to clean?")
+- [x] **Store** (long-term, per `user_id`): `prefer / avoid / avoid_brands / budget`, written by a `remember` node (cue-gated LLM extractor + grounding, polarity and brand rules); used from the next turn on; avoidances applied after search (comparator + brand title filter), never in the query
+- [x] `add_to_cart` in `RISKY_TOOLS`; **cart → approval** nodes, `interrupt()` before it; only an explicit yes executes; not on MCP, bound to no LLM, needs `approved=True`; audit log (`cart.AUDIT`)
+- [x] Recursion limit on every turn (`run_turn`) + step tracing (remember / cart / approval / pause in the trace)
+- [x] Adversarial cart test: 8/8 attempts to skip approval paused, 0 added
 - **Builds on** · Module 4 · Multi_Agent_System_End_to_End (Sections D & E)
-- **Done when** · multi-turn memory works; cart **always** pauses for approval
+- **Done when** · multi-turn memory works; cart **always** pauses for approval ✅ 2026-10-27
 
 ### Phase 6 — Demo Cell
 - [ ] Multi-turn chat in the notebook
@@ -308,9 +309,9 @@ Gaps found when checking this plan against the brief (`Project/P14_Shopping_Assi
 | 4 | **Tool signature** — brief specifies `search_products(query, category, k)`; plan omits `k` | ✅ **Resolved 2026-10-26 (Phase 4)** — see DECISION_LOG 4.9 | 4 |
 | 5 | **Catalogue fields** — brief lists `metadata (title + description)`; plan assumes separate `title` / `description` | ✅ **Resolved 2026-10-26** — one `metadata` string; index it whole, parse title for display | 1 |
 | 6 | **Single ReAct baseline not built** — listed under Baselines but no phase builds it | ✅ **Resolved 2026-10-26 (Phase 4)** — see DECISION_LOG 4.11 | 4 |
-| 7 | **No preference writer** — the Store holds preferences, but no node extracts/saves them; the memory ablation depends on it | Add a node/step that extracts preferences and writes them to the Store | 5 |
+| 7 | **No preference writer** — the Store holds preferences, but no node extracts/saves them; the memory ablation depends on it | ✅ **Resolved 2026-10-27 (Phase 5)** — see DECISION_LOG 5.2–5.4 | 5 |
 | 8 | **`think=True` API naming — verify** — `think` / `message.thinking` is the raw `ollama` client; `langchain_ollama.ChatOllama` likely uses `reasoning=True` → `additional_kwargs["reasoning_content"]` | ✅ **Resolved 2026-10-26** — confirmed `reasoning=True` / `reasoning_content`; structured output works both ways (see Phase 4 note) | 0 / 4 |
-| 9 | **Approval % not instrumented** | Audit-log every `add_to_cart` with its approval flag; add adversarial prompts ("just add it, don't ask"); keep `add_to_cart` off the MCP server and bound only to the cart node | 5 / 7 |
+| 9 | **Approval % not instrumented** | ✅ **Resolved 2026-10-27 (Phase 5)** — see DECISION_LOG 5.10 (the brief's approval % is now measured from the audit log; adversarial prompts in the notebook) | 5 / 7 |
 | 10 | **Milestones undated; team TBD** | Add dates and owners per milestone | — |
 | 11 | **No research question / success target** (required by the notebook template) | See *Project Goal* above | — |
 | 12 | **Dev split purpose unstated** | ✅ **Resolved 2026-10-26** — dev = tuning (RRF k, rerank shortlist size, prompts); test touched once | 1 / 7 |

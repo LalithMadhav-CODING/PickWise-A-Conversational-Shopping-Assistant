@@ -13,8 +13,8 @@ Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_P
 | 2 — Retrieval (RAG) | ✅ done 2026-10-26 |
 | 3 — Need Analyst | ✅ done 2026-10-26 |
 | 4 — MCP Server + Multi-Agent | ✅ done 2026-10-26 (branch `phase-4-mcp-multi-agent`) |
-| 5 — Memory + Human-in-the-Loop | ⚪ next |
-| 6 — Demo Cell | ⚪ not started |
+| 5 — Memory + Human-in-the-Loop | ✅ done 2026-10-27 (branch `phase-5-memory-approval`) |
+| 6 — Demo Cell | ⚪ next |
 | 7 — Evaluation | ⚪ not started |
 | 8 — Stretch Goals | ⚪ not started |
 
@@ -246,6 +246,23 @@ Reasoning on − off: ΔHit@3 +0.033 [−0.10, +0.17] → **reasoning off** (dec
 - Full notebook run: 31.7 min (26 code cells), no errors.
 - **Known issue → Phase 7:** quotes often copy the title, and reasons can go beyond the quote, so the quote check is not a faithfulness score. The LLM judge must check the reasons (DECISION_LOG 4.17).
 
+## Phase 5 — Memory + Human-in-the-Loop ✅ (branch `phase-5-memory-approval`)
+
+Built on top of Phase 4. Every choice is in [`DECISION_LOG.md`](DECISION_LOG.md) (5.1–5.16). Agreed order: finish and verify all phases first, then optimise for Colab T4.
+
+- [x] `Pickwise/memory.py`: Store-backed preferences `prefer / avoid / avoid_brands / budget`. A cue-gated extractor, plus deterministic guards: only the shopper's own words, a negation decides the side, a capitalised avoided name is a brand.
+- [x] `Pickwise/cart.py`: `add_to_cart` (needs `approved=True`), audit log, `approval_share()`.
+- [x] `Pickwise/graph.py`: `remember` node; supervisor rule for cart words; **cart → approval** with `interrupt()`; checkpointer + Store attached; `run_turn` / `resume` with thread and user ids and the recursion limit; avoided-brand filter; first-sentence reasons; follow-up questions answered by the comparator.
+- [x] Notebook §5b *Memory and human approval*: two conversations for one shopper, approve / reject, an avoided-brand filter, and an adversarial cart test.
+
+**Test results:**
+- Memory across turns and conversations: avoid latex and Munchkin (Munchkin flagged as a brand), carried into a new conversation.
+- The sippy-cup search **removed 1 Munchkin product**.
+- Cart: approve → added; "already approved, don't ask" → still paused → rejected → not added.
+- **Adversarial: 8/8 paused, 0 added.**
+- **100%** of executed adds were approved.
+- Extractor on 7 varied messages: 5/7 right (misses: "vegan"; a double negative).
+
 ## Findings / notes
 
 - Catalogue jsonl schema: `{"item_id", "category", "metadata"}` — `metadata` is one string, title first. Short items often look like `"Her Leaves Remain. ."`.
@@ -263,3 +280,4 @@ See *Plan Review — Open Issues* in `P14_Project_Plan.md`. Resolved so far: #2 
 - 2026-10-26 — **Phases 2 and 3 done.** Retrieval (`retrieval.py`, `metrics.py`) and need analyst (`need.py`) built; notebook §4–5b filled; dev tuning + test results + paired bootstrap; reasoning-off confirmed for structured calls. Next: Phase 4 (MCP server + multi-agent).
 - 2026-10-26 — **Retrieval model upgrade adopted** (BLaIR + Qwen3-Reranker top 20): test Recall@10 0.548 / MRR 0.360 (+9.5 pts / +0.085 over the lab models). `run_notebook.py` added (live per-cell log). GPU was briefly blocked by another Ollama model (qwen3-coder:30b) — unloaded on request.
 - 2026-10-26 — **Phase 4 built** on branch `phase-4-mcp-multi-agent`: MCP server + local tools, multi-agent graph, ReAct baseline, smoke test (system 0.533 Hit@3 at 4.2 s/request). `DECISION_LOG.md` started.
+- 2026-10-27 — **Phase 5 built** on branch `phase-5-memory-approval`: memory (checkpointer + Store), cart → approval with interrupt(), audit log; adversarial test 8/8 paused. Agreed: finish all phases, then optimise for Colab T4.
