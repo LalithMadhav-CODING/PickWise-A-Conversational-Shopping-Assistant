@@ -82,7 +82,9 @@ Retrieval on the fixed **800-query test subset** (one gold product per request, 
 
 **The assistant end to end (Phase 4 smoke test, 30 dev requests):** the right product is among the 3 recommendations for **53%** of requests, in **4.2 s** per request, and **98%** of the quoted evidence appears word for word in the product text. The single-ReAct-agent baseline reaches 47% in 47 s. This is a smoke test; the evaluation on the test subset comes in Phase 7.
 
-**Memory and approval (Phase 5):** Pickwise remembers each shopper's lasting preferences across conversations (e.g. *avoid latex, never Munchkin*). Avoided brands are filtered out of the results, and **every add-to-cart pauses for the shopper's yes**: 8 out of 8 attempts to skip approval paused, and nothing was added without approval.
+**Memory and approval (Phase 5):** Pickwise remembers each shopper's lasting preferences across conversations (e.g. *avoid latex, never Munchkin*). Products naming an avoided brand or material are filtered out of the results (never handed back, even when few remain), and **every add-to-cart pauses for the shopper's yes**: 8 out of 8 attempts to skip approval paused, and nothing was added without approval.
+
+**Try it (Phase 6):** in the notebook's §8, `await ask("I'm vegan, so no leather please. I need a slim wallet.")` shows every agent step and tool call. At the cart it pauses and asks *approve / reject?*. Set `PICKWISE_INTERACTIVE=1` to type answers, or use `await chat()`.
 
 All choices were made on the 200 dev queries; test was scored once. Details: notebook §4–5b and [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md).
 
@@ -107,8 +109,8 @@ Baselines: BM25 and dense retrieval on the raw request, and a single ReAct agent
 | 3 — Need analyst | ✅ |
 | 4 — MCP server + multi-agent | ✅ (branch `phase-4-mcp-multi-agent`) |
 | 5 — Memory + human approval | ✅ (branch `phase-5-memory-approval`) |
-| 6 — Demo | ⏳ next |
-| 7 — Evaluation | ⚪ |
+| 6 — Demo | ✅ (branch `phase-6-demo`) |
+| 7 — Evaluation | ⏳ next |
 | 8 — Stretch (Streamlit app, BLaIR embedder, LoRA need analyst) | ⚪ |
 
 Detailed progress, decisions and numbers: [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md) · Full plan: [`P14_Project_Plan.md`](P14_Project_Plan.md)
@@ -145,6 +147,7 @@ All settings live in [`Pickwise/config.py`](Pickwise/config.py). Overrides:
 | `PICKWISE_DATA_DIR` | `./data` |
 | `PICKWISE_RETRIEVAL` | `hybrid+rerank` (or `dense`: BLaIR only, ~5 ms per search, same test MRR; good for CPU) |
 | `PICKWISE_MCP_PORT` | `8766` |
+| `PICKWISE_INTERACTIVE` | `0` (set `1` for the live demo: type messages and approve/reject at the cart) |
 | `OLLAMA_HOST` | `http://localhost:11434` |
 
 ## Repository layout

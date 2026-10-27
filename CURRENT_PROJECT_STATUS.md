@@ -1,6 +1,6 @@
 # Current Project Status
 
-_Last updated: 2026-10-26_
+_Last updated: 2026-10-27_
 
 Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_Plan.md`; this file tracks progress against it.
 
@@ -14,9 +14,10 @@ Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_P
 | 3 — Need Analyst | ✅ done 2026-10-26 |
 | 4 — MCP Server + Multi-Agent | ✅ done 2026-10-26 (branch `phase-4-mcp-multi-agent`) |
 | 5 — Memory + Human-in-the-Loop | ✅ done 2026-10-27 (branch `phase-5-memory-approval`) |
-| 6 — Demo Cell | ⚪ next |
-| 7 — Evaluation | ⚪ not started |
-| 8 — Stretch Goals | ⚪ not started |
+| 6 — Demo Cell | ✅ done 2026-10-27 (branch `phase-6-demo`) |
+| 7 — Evaluation | ⚪ next (code drafted: `Pickwise/judge.py`, eval cells) |
+| 8 — Stretch Goals | ⚪ optional (BLaIR done) |
+| 9 — Colab T4 / CPU | ⚪ after Phase 7 (agreed order) |
 
 **Milestone M1 (Data + Retrieval): ✅** catalogue built; 4 retrieval variants scored. **M2 (Need analyst): ✅** rewriting vs raw measured on test; reasoning mode confirmed on dev. **Stretch: BLaIR embedder ✅** (adopted, with Qwen3-Reranker).
 
@@ -263,6 +264,22 @@ Built on top of Phase 4. Every choice is in [`DECISION_LOG.md`](DECISION_LOG.md)
 - **100%** of executed adds were approved.
 - Extractor on 7 varied messages: 5/7 right (misses: "vegan"; a double negative).
 
+## Phase 6 — Demo ✅ (branch `phase-6-demo`)
+
+Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (6.1–6.12).
+
+- [x] Notebook §8: `await ask("...")` and `await chat()` for the live talk. Every step and tool call is traced; the cart pauses for *approve / reject?*. With `PICKWISE_INTERACTIVE` unset, the demo follows a script and answers an unattended pause with **reject**.
+- [x] Scripted demo: "I'm vegan, so no leather please. I need a slim wallet" → "which of these holds the most cards?" → add #1 (approve) → "now I need a dress belt to wear with my office trousers" (leather remembered; 10 leather belts removed) → add #2 (reject).
+- [x] **Fixes found while making the demo:**
+  - "which of these" compares only the 3 products shown;
+  - unsupported "no latex" claims are removed, with an honest *"the description doesn't mention latex"* note;
+  - **avoided materials and brands are filtered deterministically, from the same message** (wallets: 7 leather products removed; belts: 4);
+  - the LLM router can no longer route to the cart (it once routed "Now I need a belt" there);
+  - **the avoid filter fails closed**: it once switched itself off when most results were leather and recommended 2 leather wallets to the vegan shopper. Now the searcher fetches 30, keeps the 10 best that pass, and shows fewer than 3 (saying so) rather than an avoided product. 0/15 leather picks on 5 vegan follow-ups;
+  - **clear follow-ups skip the LLM router** ("I need…" → search, "which of these…" → compare): routing 14/16 → **26/26** on follow-up messages, 10 of them held out;
+  - reasons no longer lose their wording when an unsupported clause is cut ("This wallet is described, a…").
+- [ ] **Open, for the Phase 7 error analysis** (6.12): the need analyst can carry the last product's must-haves into a new one; a weak search still shows 3 weak picks.
+
 ## Findings / notes
 
 - Catalogue jsonl schema: `{"item_id", "category", "metadata"}` — `metadata` is one string, title first. Short items often look like `"Her Leaves Remain. ."`.
@@ -281,3 +298,5 @@ See *Plan Review — Open Issues* in `P14_Project_Plan.md`. Resolved so far: #2 
 - 2026-10-26 — **Retrieval model upgrade adopted** (BLaIR + Qwen3-Reranker top 20): test Recall@10 0.548 / MRR 0.360 (+9.5 pts / +0.085 over the lab models). `run_notebook.py` added (live per-cell log). GPU was briefly blocked by another Ollama model (qwen3-coder:30b) — unloaded on request.
 - 2026-10-26 — **Phase 4 built** on branch `phase-4-mcp-multi-agent`: MCP server + local tools, multi-agent graph, ReAct baseline, smoke test (system 0.533 Hit@3 at 4.2 s/request). `DECISION_LOG.md` started.
 - 2026-10-27 — **Phase 5 built** on branch `phase-5-memory-approval`: memory (checkpointer + Store), cart → approval with interrupt(), audit log; adversarial test 8/8 paused. Agreed: finish all phases, then optimise for Colab T4.
+- 2026-10-27 — **Phase 6 built** on branch `phase-6-demo`: `ask()` / `chat()` demo; fixes for compare scope, unsupported avoidance claims, deterministic avoid-filter (same turn), router can't pick cart.
+- 2026-10-27 — **Phase 6 verification run** found 3 more bugs, all fixed (6.8–6.10): the avoid filter failed open, the LLM router sent a new request to compare, the clause stripper broke grammar. Demo belt request reworded (6.11). `P14_Project_Plan.md` brought fully up to date (diagram, success target, Phase 7 plan, Phase 9, milestones, risks, checklist).

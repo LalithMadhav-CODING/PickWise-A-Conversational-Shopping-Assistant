@@ -30,7 +30,8 @@ async def run_cached(name: str, run_one, qids: list, requests: list, progress: b
             out = await run_one(request)
             rec = {"qid": qid, "picks": out["picks"], "seconds": round(out["seconds"], 2),
                    "quotes_ok": out.get("quotes_ok"), "final": out.get("final", ""),
-                   "timings": {k: round(v, 3) for k, v in out.get("timings", {}).items()}}
+                   "timings": {k: round(v, 3) for k, v in out.get("timings", {}).items()},
+                   "details": out.get("details", [])}
             f.write(json.dumps(rec) + "\n")
             f.flush()
             done[qid] = rec
@@ -50,7 +51,8 @@ def system_runner(graph):
         picks = state.get("picks", [])
         return {"picks": [p["item_id"] for p in picks], "seconds": state["seconds"],
                 "quotes_ok": sum(p["quote_ok"] for p in picks), "final": state.get("final", ""),
-                "timings": state.get("timings", {})}
+                "timings": state.get("timings", {}),
+                "details": [{k: p.get(k) for k in ("item_id", "reason", "quote", "quote_ok")} for p in picks]}
     return run_one
 
 

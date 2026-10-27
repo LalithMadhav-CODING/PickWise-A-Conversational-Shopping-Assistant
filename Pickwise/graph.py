@@ -10,8 +10,8 @@ Agentic_app (graph.py) and Multi_Agent_System_End_to_End (Sections B-F).
 - remember: extracts lasting preferences from each message into the Store (memory.py); every later turn
   and conversation of the same shopper reads them.
 - Supervisor: no products shown yet -> search (rule); a cart word in the LAST message -> cart (rule: as in
-  the lab, the decision that leads to a high-risk action is a rule); otherwise an LLM router (structured
-  output, reasoning off) chooses search / compare / cart.
+  the lab, the decision that leads to a high-risk action is a rule, so the LLM router cannot choose cart);
+  otherwise an LLM router (structured output, reasoning off) chooses search / compare.
 - Need analyst: need.aanalyse, structured output, reasoning off, with the remembered preferences.
 - Searcher: a tool node, no LLM: search_products over MCP or in-process with the need analyst's query.
 - Comparator: structured output, reasoning off (DECISION_LOG 4.15): 3 picks by item_id (a Literal of the
@@ -56,7 +56,8 @@ class ShopState(MessagesState):
     query: str            # what the searcher sent to the catalogue
     candidates: list      # products the searcher found: [{item_id, title, category, text}]
     picks: list           # comparator's 3 picks: [{item_id, title, reason, quote, quote_ok}]
-    dropped: int          # candidates removed because their brand is one the shopper avoids
+    searched: int         # how many results the searcher asked for (more when the shopper avoids something)
+    dropped: int          # products removed because they name a brand or material the shopper avoids
     pending: dict         # the cart action waiting for the shopper's approval
     cart_status: str      # "", "added", "rejected", "unclear"
     final: str            # the reply to the shopper
@@ -68,6 +69,15 @@ def new_turn(text: str) -> dict:
     picks stay in the conversation's checkpoint, so 'the second one' still means something next turn."""
     return {"messages": [HumanMessage(text)], "route": "", "final": "", "timings": {}, "pending": {},
             "cart_status": ""}
+
+
+def with_learned(state) -> dict:
+    """The remembered preferences plus the avoidances learned from this message: those apply at once."""
+    prefs = dict(state.get("preferences") or {})
+    learned = state.get("learned") or {}
+    for field in ("avoid", "avoid_brands"):
+        prefs[field] = list(dict.fromkeys([*prefs.get(field, []), *learned.get(field, [])]))
+    return prefs
 
 
 def last_user_message(state) -> str:
@@ -95,8 +105,9 @@ def user_of(cfg) -> str:
 
 
 # ================================================================== the comparator's output schema
-def recommendation_schema(candidate_ids: list):
-    """Built per turn: item_id is a Literal of the candidates' ids, compiled into the generation grammar."""
+def recommendation_schema(candidate_ids: list, n: int = 3):
+    """Built per turn: item_id is a Literal of the candidates' ids, compiled into the generation grammar;
+    exactly n picks (3, or fewer when the avoid filter leaves fewer candidates)."""
     pick = create_model(
         "Pick",
         item_id=(Literal[tuple(candidate_ids)], Field(description="the item_id of one candidate product")),
@@ -104,7 +115,7 @@ def recommendation_schema(candidate_ids: list):
         quote=(str, Field(description="a short phrase copied word for word from this product's text that supports the reason")),
     )
     return create_model("Recommendation", picks=(list[pick], Field(
-        description="the 3 best candidates for the shopper, best first", min_length=3, max_length=3)))
+        description=f"the {n} best candidates for the shopper, best first", min_length=n, max_length=n)))
 
 
 COMPARATOR_PROMPT = """You are the COMPARATOR of a shopping assistant. From the candidate products, choose the 3 that best satisfy the shopper's request, best first.
@@ -125,13 +136,54 @@ def first_sentence(text: str, limit: int = 300) -> str:
     return sentence if len(sentence) <= limit else sentence[:limit - 1].rsplit(" ", 1)[0] + "…"
 
 
-def drop_avoided_brands(candidates: list, brands: list) -> tuple:
-    """Remove products whose title names a brand the shopper avoids (kept if that would leave < 3)."""
-    if not brands:
+def strip_unsupported(reason: str, avoid: list, text: str) -> tuple:
+    """A 4B model claims 'no latex' / 'avoids Munchkin' when the product text never mentions them, and an
+    instruction alone doesn't stop it. Drop every clause of the reason that names an avoided term the text
+    doesn't mention; return the reason and those terms, so the reply can say the description is silent."""
+    unknown = [a for a in avoid if normalise(a) and normalise(a) not in normalise(text)]
+    if not unknown:
+        return reason, []
+    # the avoided terms themselves, and talk about the shopper's allergy / preferences that depends on them
+    mentions = re.compile(r"\b(" + "|".join(re.escape(a) for a in unknown) +
+                          r"|allerg\w*|(brand )?preferences?)\b", re.I)
+    if mentions.search(reason):
+        # split keeping the separators, so the clauses that stay keep their own "as" / "and" / ", "
+        parts = re.split(r"(,\s*|;\s*|\s+(?:and|which|making|so|that|while|as)\s+)", reason.rstrip(". "))
+        kept = ""
+        for i in range(0, len(parts), 2):
+            if parts[i] and not mentions.search(parts[i]):
+                kept += (parts[i - 1] if kept else "") + parts[i]
+        kept = kept.strip()
+        reason = (kept[0].upper() + kept[1:] + ".") if kept else "It matches your request."
+    return reason, unknown
+
+
+NEGATED_BEFORE = re.compile(r"\b(faux|vegan|pu|synthetic|imitation|artificial|fake|non|no|without|free of)[\s-]*$", re.I)
+NEGATED_AFTER = re.compile(r"^[\s-]*(free)\b", re.I)
+
+
+def violates(term: str, text: str) -> bool:
+    """Does the product text name an avoided term in a positive way? 'genuine leather' yes; 'faux leather',
+    'vegan leather', 'latex-free', 'non-latex' no."""
+    for match in re.finditer(r"\b" + re.escape(term) + r"\b", text, re.I):
+        if not NEGATED_BEFORE.search(text[max(0, match.start() - 20):match.start()]) \
+                and not NEGATED_AFTER.search(text[match.end():match.end() + 8]):
+            return True
+    return False
+
+
+def drop_avoided(candidates: list, avoid: list, brands: list) -> tuple:
+    """Remove products whose title names an avoided brand, or whose text names an avoided material or
+    ingredient in a positive way (a 4B comparator does not reliably honour 'must avoid'). Fails closed: an
+    avoided product is never handed back, even if fewer than 3 remain (the searcher fetches extra to refill)."""
+    if not avoid and not brands:
         return candidates, 0
-    pattern = re.compile(r"\b(" + "|".join(re.escape(b) for b in brands) + r")\b", re.I)
-    kept = [c for c in candidates if not pattern.search(c["title"])]
-    return (kept, len(candidates) - len(kept)) if len(kept) >= 3 else (candidates, 0)
+    brand_pattern = re.compile(r"\b(" + "|".join(re.escape(b) for b in brands) + r")\b", re.I) if brands else None
+    materials = [a for a in avoid if a.lower() not in {b.lower() for b in brands}]
+    kept = [c for c in candidates
+            if not (brand_pattern and brand_pattern.search(c["title"]))
+            and not any(violates(m, c["title"] + " " + c["text"]) for m in materials)]
+    return kept, len(candidates) - len(kept)
 
 
 def render(picks: list, need: dict, question: str = None) -> str:
@@ -139,25 +191,34 @@ def render(picks: list, need: dict, question: str = None) -> str:
     if question:
         lines = [f'On your question "{question.strip()}", here is how the products compare, best first:']
     else:
-        lines = [f"Here are my top {len(picks)} picks" + (f" (searched for: {what}):" if what else ":")]
+        top = f"are my top {len(picks)} picks" if len(picks) > 1 else "is my top pick"
+        lines = [f"Here {top}" + (f" (searched for: {what}):" if what else ":")]
     for i, p in enumerate(picks, 1):
         title = p["title"] if len(p["title"]) <= 100 else p["title"][:97] + "…"
         lines.append(f"{i}. {title}\n   {p['reason']}")
         if p.get("quote") and p.get("quote_ok"):
             lines.append(f'   From the product description: "{p["quote"]}"')
+        if p.get("unknown"):
+            lines.append(f"   Note: the description doesn't mention {' or '.join(p['unknown'])}, so please check before buying.")
     lines.append("Would you like more details on one of them, or shall I add one to your cart?")
     return "\n".join(lines)
 
 
 # ================================================================== the system
 class Route(BaseModel):
-    next: Literal["search", "compare", "cart"] = Field(description=(
+    # no "cart" option: the step that leads to the high-risk action is chosen by a rule only (CART_WORDS)
+    next: Literal["search", "compare"] = Field(description=(
         "search: the shopper describes what they need, or changes it (cheaper, another colour, a different product). "
-        "compare: a question about the products already shown (which is better, more details). "
-        "cart: the shopper wants to buy or add a shown product to the cart."))
+        "compare: a question about the products already shown (which is better, more details)."))
 
 
 CART_WORDS = re.compile(r"\b(add|cart|basket|buy|order|purchase|checkout|get me)\b", re.I)
+# Clear cases skip the LLM router, which sent "Now I need a dress belt…" to compare after a vegan-wallet turn
+# and "Tell me more about the first one" to search. A message with both signals, or neither, goes to the LLM.
+NEW_NEED = re.compile(r"\b(need|needs|looking for|want|show me|find me|search for|do you (have|sell)|instead|"
+                      r"another|cheaper|different)\b", re.I)
+ABOUT_SHOWN = re.compile(r"\b(these|those|them|which (one|of)|one of|the (first|second|third|last|other)|"
+                         r"(first|second|third) one|this one|that one|compare|difference|between)\b", re.I)
 ORDINALS = {1: r"\b(first|1st|number one|#1|option 1|no\.? ?1)\b", 2: r"\b(second|2nd|number two|#2|option 2|no\.? ?2)\b",
             3: r"\b(third|3rd|number three|#3|option 3|no\.? ?3)\b"}
 
@@ -168,9 +229,10 @@ class CartChoice(BaseModel):
 
 
 async def build_system(via: str = "mcp", comparator_reasoning: bool = False, memory_on: bool = True,
-                       checkpointer=None, store=None):
+                       rewrite: bool = True, checkpointer=None, store=None):
     """Assemble the multi-agent graph. via: tools from the MCP server ('mcp') or in-process ('local').
-    memory_on=False skips the Store (the memory on/off ablation)."""
+    Ablations: memory_on=False skips the Store; rewrite=False searches with the shopper's own words
+    (the need analyst is skipped)."""
     tools = await get_tools(via)
     search_tool = tools["search_products"]
     router = get_llm(reasoning=False).with_structured_output(Route)
@@ -204,6 +266,10 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, mem
             route, why = "search", "rule: no products shown yet"
         elif state.get("picks") and CART_WORDS.search(text):
             route, why = "cart", "rule: cart word in the last message"
+        elif NEW_NEED.search(text) and not ABOUT_SHOWN.search(text):
+            route, why = "search", "rule: asks for something new"
+        elif ABOUT_SHOWN.search(text) and not NEW_NEED.search(text):
+            route, why = "compare", "rule: about the products shown"
         else:
             decision = await router.ainvoke(
                 "You route a shopper's message to the right step of a shopping assistant.\n"
@@ -218,6 +284,8 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, mem
     async def need_analyst(state: ShopState):
         t = time.perf_counter()
         text = last_user_message(state)
+        if not rewrite:                                     # ablation: search with the raw request
+            return {"need": {}, "query": text, "timings": {**state["timings"], "need_analyst": 0.0}}
         earlier = conversation(state, last_n=6) if len(state["messages"]) > 1 else ""
         request = f"Earlier conversation:\n{earlier}\n\nLatest request: {text}" if earlier else text
         remembered = memory.describe(state.get("preferences") or {}, negatives=False)   # avoidances: comparator
@@ -233,16 +301,30 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, mem
 
     async def searcher(state: ShopState):
         t = time.perf_counter()
-        result = json.loads(tool_text(await search_tool.ainvoke({"query": state["query"], "k": config.N_CANDIDATES})))
-        return {"candidates": result["products"],
+        prefs = with_learned(state)
+        avoid, brands = prefs.get("avoid", []), prefs.get("avoid_brands", [])
+        k = config.N_CANDIDATES * 3 if avoid or brands else config.N_CANDIDATES   # room to refill after the filter
+        result = json.loads(tool_text(await search_tool.ainvoke({"query": state["query"], "k": k})))
+        candidates, dropped = drop_avoided(result["products"], avoid, brands)
+        return {"candidates": candidates[:config.N_CANDIDATES], "searched": k, "dropped": dropped,
                 "timings": {**state["timings"], "searcher": time.perf_counter() - t,
                             "search_compute": result["seconds"]}}
 
     async def comparator(state: ShopState):
         t = time.perf_counter()
-        prefs = state.get("preferences") or {}
-        candidates, dropped = drop_avoided_brands(state["candidates"], prefs.get("avoid_brands", []))
+        prefs = with_learned(state)
+        pool = state["candidates"]
+        if state.get("route", "").startswith("compare") and state.get("picks"):
+            shown = [p["item_id"] for p in state["picks"]]  # "which of these…": only the products just shown
+            pool = sorted((c for c in pool if c["item_id"] in shown), key=lambda c: shown.index(c["item_id"]))
+        candidates, dropped = drop_avoided(pool, prefs.get("avoid", []), prefs.get("avoid_brands", []))
         by_id = {c["item_id"]: c for c in candidates}
+        n = min(3, len(candidates))
+        if not n:                                           # everything found names something the shopper avoids
+            final = (f"Every product I found mentions {' or '.join(prefs['avoid'] + prefs['avoid_brands'])}, "
+                     "which you avoid. Could you describe what you need in another way?")
+            return {"picks": [], "final": final, "messages": [AIMessage(final)], "dropped": dropped,
+                    "timings": {**state["timings"], "comparator": time.perf_counter() - t}}
         request = f"Shopper's request: {last_user_message(state)}"
         if len(state["messages"]) > 1:                      # a follow-up: give the conversation as context
             request += f"\n\nConversation so far:\n{conversation(state)}"
@@ -251,27 +333,34 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, mem
             request += (f"\n\nRemembered shopper preferences: {remembered}. Respect them: prefer liked brands "
                         "and avoid products whose text shows something the shopper must avoid. A product's text "
                         "not mentioning something does NOT show that the product avoids it: never claim that.")
+        if n < 3:
+            request += f"\n\nOnly {n} candidate{'s' if n > 1 else ''} fit{'' if n > 1 else 's'} the shopper's avoidances: rank {'them' if n > 1 else 'it'}."
         prompt = [SystemMessage(COMPARATOR_PROMPT),
                   HumanMessage(f"{request}\n\nCandidate products:\n\n{format_candidates(candidates)}")]
         picks = []
         try:
             out = await comparator_llm.with_structured_output(
-                recommendation_schema(list(by_id))).ainvoke(prompt)
+                recommendation_schema(list(by_id), n)).ainvoke(prompt)
             for p in out.picks:
                 if p.item_id in by_id and p.item_id not in {x["item_id"] for x in picks}:
-                    picks.append({"item_id": p.item_id, "title": by_id[p.item_id]["title"],
-                                  "reason": first_sentence(p.reason),
-                                  "quote": p.quote, "quote_ok": quote_in_text(p.quote, by_id[p.item_id]["text"])})
+                    text = by_id[p.item_id]["text"]
+                    reason, unknown = strip_unsupported(first_sentence(p.reason), prefs.get("avoid", []), text)
+                    picks.append({"item_id": p.item_id, "title": by_id[p.item_id]["title"], "reason": reason,
+                                  "unknown": [u for u in unknown if u not in prefs.get("avoid_brands", [])],
+                                  "quote": p.quote, "quote_ok": quote_in_text(p.quote, text)})
         except Exception:
             pass                                            # an invalid reply falls back to the search order
-        for c in candidates:                                # fewer than 3 valid picks: fill from the search order
-            if len(picks) >= 3:
+        for c in candidates:                                # fewer than n valid picks: fill from the search order
+            if len(picks) >= n:
                 break
             if c["item_id"] not in {x["item_id"] for x in picks}:
                 picks.append({"item_id": c["item_id"], "title": c["title"], "quote": "", "quote_ok": False,
                               "reason": "One of the closest matches to your request in the catalogue."})
         question = last_user_message(state) if state.get("route", "").startswith("compare") else None
         final = render(picks, state.get("need"), question)
+        if n < 3 and not question and (prefs["avoid"] or prefs["avoid_brands"]):
+            final = (f"Only {n} of the products I found avoid {' and '.join(prefs['avoid'] + prefs['avoid_brands'])}.\n"
+                     + final)
         return {"picks": picks, "final": final, "messages": [AIMessage(final)], "dropped": dropped,
                 "timings": {**state["timings"], "comparator": time.perf_counter() - t}}
 
@@ -332,7 +421,7 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, mem
     g.add_edge("comparator", END)
     g.add_edge("approval", END)
     graph = g.compile(checkpointer=checkpointer or InMemorySaver(), store=store or InMemoryStore())
-    graph.via, graph.comparator_reasoning, graph.memory_on = via, comparator_reasoning, memory_on
+    graph.via, graph.comparator_reasoning, graph.memory_on, graph.rewrite = via, comparator_reasoning, memory_on, rewrite
     return graph
 
 
@@ -357,12 +446,13 @@ def _print_step(graph, node: str, delta: dict, state: dict) -> None:
         print(f"  [need_analyst] {n.get('product_type')!r} · must-haves {n.get('must_haves')} · "
               f"category {n.get('category')}  ({s:.1f}s)" if n else f"  [need_analyst] failed → raw request ({s:.1f}s)")
     elif node == "searcher":
-        print(f"  [searcher]     search_products(query={_short(state['query'], 80)!r}, k={config.N_CANDIDATES}) "
-              f"via {graph.via.upper()} → {len(delta['candidates'])} products  "
+        removed = f", {delta['dropped']} removed that the shopper avoids" if delta.get("dropped") else ""
+        print(f"  [searcher]     search_products(query={_short(state['query'], 80)!r}, k={delta['searched']}) "
+              f"via {graph.via.upper()} → {len(delta['candidates'])} products{removed}  "
               f"(call {s:.2f}s, of which search {state['timings']['search_compute']:.2f}s)")
     elif node == "comparator":
         ok = sum(p["quote_ok"] for p in delta["picks"])
-        dropped = f" · removed {delta['dropped']} from avoided brands" if delta.get("dropped") else ""
+        dropped = f" · removed {delta['dropped']} that the shopper avoids" if delta.get("dropped") else ""
         print(f"  [comparator]   picks {[p['item_id'] for p in delta['picks']]} · "
               f"quotes found in product text {ok}/{len(delta['picks'])}{dropped}  ({s:.1f}s)")
     elif node == "cart":
