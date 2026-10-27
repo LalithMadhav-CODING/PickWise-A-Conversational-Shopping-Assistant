@@ -27,3 +27,6 @@ outlines
 # Notebook
 matplotlib
 ipykernel
+
+# Web app stretch (app.py; the Module 4 Agentic_app idea, with Gradio)
+gradio>=6

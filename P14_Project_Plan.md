@@ -9,7 +9,7 @@
 > **Model** · qwen3:4b via Ollama (≤4B params, no paid APIs)
 
 > [!abstract] Where we are · updated 2026-10-27
-> Phases 0–6 built (✅ below) · **Phase 7 (evaluation) next** · then Phase 8 stretch (optional) · then **Phase 9: run on free Colab T4 / laptop CPU** (agreed order: verify every phase first, then optimise). Live progress: `CURRENT_PROJECT_STATUS.md` · every choice made without the team: `DECISION_LOG.md`.
+> Phases 0–6 built (✅ below) · Phase 8 web app ✅ (built early, during the Phase 6 run) · **Phase 7 (evaluation) next** · then **Phase 9: run on free Colab T4 / laptop CPU** (agreed order: verify every phase first, then optimise). Live progress: `CURRENT_PROJECT_STATUS.md` · every choice made without the team: `DECISION_LOG.md`.
 
 ---
 
@@ -225,11 +225,11 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 - **Done when** · full results table + error analysis written up; success target met or the miss explained
 
 ### Phase 8 — Stretch Goals (top marks)
-- [ ] Streamlit/Gradio app (chat, live trace, cart approve/reject, MCP/local switch)
+- [x] **Web app (Gradio)** — `app.py`: chat, live agent trace, Approve / Reject at the cart, preferences, cart, approval log, MCP/local switch; runs the same graph as the notebook (branch `phase-8-app`, `DECISION_LOG.md` 8.1–8.8). Tested: 16/16 end-to-end checks through the app's HTTP API + browser screenshots (desktop, phone)
 - [x] BLaIR embedder vs. general embedders — **done and adopted** (plus re-ranker comparison; notebook §5b *Retrieval model upgrade*)
 - [ ] LoRA-tuned need analyst
-- **Builds on** · Module 4 · Agentic_app (Streamlit reference)
-- **Done when** · at least one stretch goal working
+- **Builds on** · Module 4 · Agentic_app (Streamlit reference; Gradio used, see 8.2)
+- **Done when** · at least one stretch goal working ✅ (BLaIR, web app)
 
 ### Phase 9 — Run on free Colab T4 / laptop CPU  (brief constraint; after every phase is verified, as agreed 2026-10-27)
 - [ ] `QUICK_RUN` also shrinks the dev experiments (model comparison, reasoning on/off check, smoke tests), which take hours on a first run today
@@ -375,7 +375,7 @@ Gaps found when checking this plan against the brief (`Project/P14_Shopping_Assi
 | Multi-agent supervisor + specialists | Module 4 · Multi_Agent_System_End_to_End |
 | MCP server + tools | Module 4 · MCP_Server_and_Tools_Lab |
 | Memory + approval | Module 4 · Multi_Agent_System_End_to_End (D & E) |
-| Streamlit app (stretch) | Module 4 · Agentic_app |
+| Web app (stretch; Gradio) | Module 4 · Agentic_app |
 | Spec | P14_Shopping_Assistant_MCP.pdf |
 
 ---

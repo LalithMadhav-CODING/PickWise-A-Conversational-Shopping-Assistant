@@ -432,69 +432,84 @@ def _short(text: str, n: int = 110) -> str:
     return text if len(text) <= n else text[:n - 1] + "…"
 
 
-def _print_step(graph, node: str, delta: dict, state: dict) -> None:
+def step_line(graph, node: str, delta: dict, state: dict) -> str:
+    """One trace line for an agent step: what it did and how long it took."""
     s = state.get("timings", {}).get(node, 0.0)
     if node == "remember":
         remembered = memory.describe(delta.get("preferences") or {})
         learned = memory.describe({**memory.EMPTY, **(delta.get("learned") or {})})
-        print(f"  [remember]     using: {remembered or 'nothing on record'}"
-              f"{' · learned: ' + learned if learned else ''}  ({s:.1f}s)")
-    elif node == "supervisor":
-        print(f"  [supervisor]   → {delta['route']}  ({s:.1f}s)")
-    elif node == "need_analyst":
+        return (f"  [remember]     using: {remembered or 'nothing on record'}"
+                f"{' · learned: ' + learned if learned else ''}  ({s:.1f}s)")
+    if node == "supervisor":
+        return f"  [supervisor]   → {delta['route']}  ({s:.1f}s)"
+    if node == "need_analyst":
         n = delta["need"]
-        print(f"  [need_analyst] {n.get('product_type')!r} · must-haves {n.get('must_haves')} · "
-              f"category {n.get('category')}  ({s:.1f}s)" if n else f"  [need_analyst] failed → raw request ({s:.1f}s)")
-    elif node == "searcher":
+        return (f"  [need_analyst] {n.get('product_type')!r} · must-haves {n.get('must_haves')} · "
+                f"category {n.get('category')}  ({s:.1f}s)" if n else f"  [need_analyst] failed → raw request ({s:.1f}s)")
+    if node == "searcher":
         removed = f", {delta['dropped']} removed that the shopper avoids" if delta.get("dropped") else ""
-        print(f"  [searcher]     search_products(query={_short(state['query'], 80)!r}, k={delta['searched']}) "
-              f"via {graph.via.upper()} → {len(delta['candidates'])} products{removed}  "
-              f"(call {s:.2f}s, of which search {state['timings']['search_compute']:.2f}s)")
-    elif node == "comparator":
+        return (f"  [searcher]     search_products(query={_short(state['query'], 80)!r}, k={delta['searched']}) "
+                f"via {graph.via.upper()} → {len(delta['candidates'])} products{removed}  "
+                f"(call {s:.2f}s, of which search {state['timings']['search_compute']:.2f}s)")
+    if node == "comparator":
         ok = sum(p["quote_ok"] for p in delta["picks"])
         dropped = f" · removed {delta['dropped']} that the shopper avoids" if delta.get("dropped") else ""
-        print(f"  [comparator]   picks {[p['item_id'] for p in delta['picks']]} · "
-              f"quotes found in product text {ok}/{len(delta['picks'])}{dropped}  ({s:.1f}s)")
-    elif node == "cart":
+        return (f"  [comparator]   picks {[p['item_id'] for p in delta['picks']]} · "
+                f"quotes found in product text {ok}/{len(delta['picks'])}{dropped}  ({s:.1f}s)")
+    if node == "cart":
         d = delta.get("pending")
-        print(f"  [cart]         {'wants ' + str(d['quantity']) + ' × ' + _short(d['title'], 60) if d else 'unclear which product'}  ({s:.1f}s)")
-    elif node == "approval":
-        print(f"  [approval]     {'✅ approved → add_to_cart executed' if delta.get('cart_status') == 'added' else '❌ not approved → cart unchanged'}")
-    else:
-        print(f"  [{node}]")
+        return f"  [cart]         {'wants ' + str(d['quantity']) + ' × ' + _short(d['title'], 60) if d else 'unclear which product'}  ({s:.1f}s)"
+    if node == "approval":
+        return f"  [approval]     {'✅ approved → add_to_cart executed' if delta.get('cart_status') == 'added' else '❌ not approved → cart unchanged'}"
+    return f"  [{node}]"
 
 
-async def _stream(graph, graph_input, cfg: dict, verbose: bool, t0: float) -> dict:
-    """Stream one turn (or a resume), printing each step; return the conversation state afterwards."""
+async def stream_turn(graph, graph_input, cfg: dict, t0: float = None):
+    """Run one turn (or a resume) and yield a trace line for each step as it happens; the last item yielded
+    is the conversation state afterwards (a dict). Used by run_turn / resume here, and by the web app."""
+    t0 = t0 or time.perf_counter()
     waiting, running = None, dict((await graph.aget_state(cfg)).values)
     async for update in graph.astream(graph_input, cfg, stream_mode="updates"):
         for node, delta in update.items():
             if node == "__interrupt__":
                 waiting = delta[0].value
-                if verbose:
-                    print(f"  ⏸  waiting for the shopper: add {waiting['quantity']} × {_short(waiting['title'], 70)} "
-                          "to the cart? (approve / reject)")
+                yield (f"  ⏸  waiting for the shopper: add {waiting['quantity']} × {_short(waiting['title'], 70)} "
+                       "to the cart? (approve / reject)")
             elif isinstance(delta, dict):
                 running.update(delta)
-                if verbose:
-                    _print_step(graph, node, delta, running)
+                yield step_line(graph, node, delta, running)
     state = dict((await graph.aget_state(cfg)).values)
     state.update(waiting_for_approval=waiting, cfg=cfg, seconds=time.perf_counter() - t0)
-    if verbose and not waiting:
+    yield state
+
+
+async def _stream(graph, graph_input, cfg: dict, verbose: bool, t0: float) -> dict:
+    """Stream one turn (or a resume), printing each step; return the conversation state afterwards."""
+    async for item in stream_turn(graph, graph_input, cfg, t0):
+        if isinstance(item, dict):
+            state = item
+        elif verbose:
+            print(item)
+    if verbose and not state["waiting_for_approval"]:
         print(f"\n🤖 Pickwise ({state['seconds']:.1f}s):\n{state.get('final', '')}\n")
     return state
 
 
-async def run_turn(graph, text: str, cfg: dict = None, verbose: bool = True) -> dict:
-    """Run one shopper turn and print a trace of every agent step and tool call as it happens.
-    cfg = {"configurable": {"thread_id": conversation, "user_id": shopper}}; a missing thread_id starts a
-    new conversation. If the turn pauses for approval, state['waiting_for_approval'] holds the action:
-    continue with resume(graph, "approve" | "reject", state['cfg'])."""
+def turn_config(cfg: dict = None) -> dict:
+    """cfg = {"configurable": {"thread_id": conversation, "user_id": shopper}}, with defaults for missing ids
+    (a missing thread_id starts a new conversation) and the recursion limit."""
     cfg = cfg or {}
     configurable = {"thread_id": f"t-{uuid.uuid4().hex[:8]}", "user_id": "anonymous", **cfg.get("configurable", {})}
-    cfg = {**cfg, "configurable": configurable, "recursion_limit": config.RECURSION_LIMIT}
+    return {**cfg, "configurable": configurable, "recursion_limit": config.RECURSION_LIMIT}
+
+
+async def run_turn(graph, text: str, cfg: dict = None, verbose: bool = True) -> dict:
+    """Run one shopper turn and print a trace of every agent step and tool call as it happens.
+    If the turn pauses for approval, state['waiting_for_approval'] holds the action: continue with
+    resume(graph, "approve" | "reject", state['cfg'])."""
+    cfg = turn_config(cfg)
     if verbose:
-        print(f"🛒 shopper ({configurable['user_id']}): {_short(text, 200)}")
+        print(f"🛒 shopper ({cfg['configurable']['user_id']}): {_short(text, 200)}")
     return await _stream(graph, new_turn(text), cfg, verbose, time.perf_counter())
 
 

@@ -16,7 +16,7 @@ Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_P
 | 5 — Memory + Human-in-the-Loop | ✅ done 2026-10-27 (branch `phase-5-memory-approval`) |
 | 6 — Demo Cell | ✅ done 2026-10-27 (branch `phase-6-demo`) |
 | 7 — Evaluation | ⚪ next (code drafted: `Pickwise/judge.py`, eval cells) |
-| 8 — Stretch Goals | ⚪ optional (BLaIR done) |
+| 8 — Stretch Goals | 🟡 web app ✅ 2026-10-27 (branch `phase-8-app`), BLaIR ✅, LoRA ⚪ |
 | 9 — Colab T4 / CPU | ⚪ after Phase 7 (agreed order) |
 
 **Milestone M1 (Data + Retrieval): ✅** catalogue built; 4 retrieval variants scored. **M2 (Need analyst): ✅** rewriting vs raw measured on test; reasoning mode confirmed on dev. **Stretch: BLaIR embedder ✅** (adopted, with Qwen3-Reranker).
@@ -280,6 +280,14 @@ Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (6.1–6.12).
   - reasons no longer lose their wording when an unsupported clause is cut ("This wallet is described, a…").
 - [ ] **Open, for the Phase 7 error analysis** (6.12): the need analyst can carry the last product's must-haves into a new one; a weak search still shows 3 weak picks.
 
+## Phase 8 — Web app ✅ (branch `phase-8-app`)
+
+Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (8.1–8.8). Built while the Phase 6 verification run was going.
+
+- [x] `app.py` (Gradio 6.30): chat; **agent trace streaming step by step**; **Approve / Reject** buttons when a cart action pauses (or type yes / no); remembered preferences, cart and approval log per shopper; New conversation / Forget my preferences; MCP ↔ local switch. Run: `.venv/bin/python app.py` → http://127.0.0.1:7860 (`--share` for a public link).
+- [x] Runs the **same graph** as the notebook. `graph.py` now yields its trace lines (`stream_turn`), and the notebook prints them exactly as before.
+- [x] Tested through the app's own HTTP API: **16/16 checks**: streaming, vegan filter, approve button, typed "no", MCP→local mid-conversation, memory across conversations, forget, two shoppers in two sessions. First reply 4.1 s (graph built when the page opens; was 14.2 s). Browser screenshots (desktop + phone) checked the layout; fixed the trace wrapping, a duplicated cart question and squeezed table columns.
+
 ## Findings / notes
 
 - Catalogue jsonl schema: `{"item_id", "category", "metadata"}` — `metadata` is one string, title first. Short items often look like `"Her Leaves Remain. ."`.
@@ -300,3 +308,4 @@ See *Plan Review — Open Issues* in `P14_Project_Plan.md`. Resolved so far: #2 
 - 2026-10-27 — **Phase 5 built** on branch `phase-5-memory-approval`: memory (checkpointer + Store), cart → approval with interrupt(), audit log; adversarial test 8/8 paused. Agreed: finish all phases, then optimise for Colab T4.
 - 2026-10-27 — **Phase 6 built** on branch `phase-6-demo`: `ask()` / `chat()` demo; fixes for compare scope, unsupported avoidance claims, deterministic avoid-filter (same turn), router can't pick cart.
 - 2026-10-27 — **Phase 6 verification run** found 3 more bugs, all fixed (6.8–6.10): the avoid filter failed open, the LLM router sent a new request to compare, the clause stripper broke grammar. Demo belt request reworded (6.11). `P14_Project_Plan.md` brought fully up to date (diagram, success target, Phase 7 plan, Phase 9, milestones, risks, checklist).
+- 2026-10-27 — **Phase 6 pushed** (`c1372fe`). **Phase 8 web app built** (`app.py`, branch `phase-8-app`): 16/16 end-to-end checks.

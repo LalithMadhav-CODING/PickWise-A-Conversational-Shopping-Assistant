@@ -86,6 +86,8 @@ Retrieval on the fixed **800-query test subset** (one gold product per request, 
 
 **Try it (Phase 6):** in the notebook's §8, `await ask("I'm vegan, so no leather please. I need a slim wallet.")` shows every agent step and tool call. At the cart it pauses and asks *approve / reject?*. Set `PICKWISE_INTERACTIVE=1` to type answers, or use `await chat()`.
 
+**Web app (Phase 8):** `.venv/bin/python app.py` opens Pickwise at http://127.0.0.1:7860 (`--share` adds a temporary public link). It runs the same graph as the notebook: chat on the left, the agent trace streaming step by step on the right, **Approve / Reject** buttons when a cart action pauses, what Pickwise remembers about you, your cart, the approval log, and a switch between MCP and local tools.
+
 All choices were made on the 200 dev queries; test was scored once. Details: notebook §4–5b and [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md).
 
 ## Evaluation plan
@@ -111,7 +113,8 @@ Baselines: BM25 and dense retrieval on the raw request, and a single ReAct agent
 | 5 — Memory + human approval | ✅ (branch `phase-5-memory-approval`) |
 | 6 — Demo | ✅ (branch `phase-6-demo`) |
 | 7 — Evaluation | ⏳ next |
-| 8 — Stretch (Streamlit app, BLaIR embedder, LoRA need analyst) | ⚪ |
+| 8 — Stretch: web app ✅ (branch `phase-8-app`), BLaIR embedder ✅, LoRA need analyst ⚪ | 🟡 |
+| 9 — Colab T4 / CPU | ⚪ after Phase 7 |
 
 Detailed progress, decisions and numbers: [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md) · Full plan: [`P14_Project_Plan.md`](P14_Project_Plan.md)
 
@@ -134,7 +137,7 @@ python3 -m venv .venv
 
 The first run streams the 640 MB catalogue file (≈ 3 min), embeds the catalogue and analyses 1,000 requests with the LLM (≈ 15 min on a GPU, plus about an hour for the reasoning-on comparison), and embeds the catalogue with three embedders for the model comparison. Everything is cached in `data/`; a re-run then takes about 30 min on a GPU, mostly re-ranking. Set `PICKWISE_QUICK_RUN=1` for a 100-query test subset.
 
-It also runs on a free Colab T4: clone the repo, then install and start Ollama in the runtime (see the notebook's Setup section).
+Running on a free Colab T4 or a laptop CPU (a requirement of the brief) is not verified yet: that is Phase 9, after the evaluation.
 
 ### Settings
 
@@ -166,8 +169,10 @@ Pickwise/                      reusable code imported by the notebook, MCP serve
   tools.py                     the tools via MCP or in-process; starts the server when needed
   graph.py                     LangGraph supervisor → need analyst → searcher → comparator; ReAct baseline
   evaluate.py                  cached end-to-end runs, Hit@3
+  judge.py                     faithfulness judge + the sheet for human checks (Phase 7)
   memory.py                    long-term memory: shopper preferences in the LangGraph Store
   cart.py                      add_to_cart (only after approval) + audit log
+app.py                         the web app (Gradio): chat, live trace, approve / reject at the cart
 requirements.txt
 run_notebook.py                runs the notebook top to bottom with a live per-cell log
 P14_Project_Plan.md            build plan, risks, open issues
@@ -185,7 +190,7 @@ The course brief (`Project/`) and labs (`modules/`) are kept locally and are not
 | Retrieval / RAG | Module 3 · RAG_Pipeline_Lab |
 | Supervisor + specialists, memory, approval | Module 4 · Multi_Agent_System_End_to_End |
 | MCP server + tools | Module 4 · MCP_Server_and_Tools_Lab |
-| Config / LLM wrapper / app structure | Module 4 · Agentic_app |
+| Config / LLM wrapper / app structure, web app | Module 4 · Agentic_app |
 
 ## Team
 
