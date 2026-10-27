@@ -55,9 +55,21 @@ def has_cue(message: str) -> bool:
     return bool(CUES.search(message))
 
 
+# An explicit brand statement ("I always buy Columbia", "I never buy anything from Munchkin", "I only wear Nike").
+# The LLM extractor is borderline on these: at temperature 0 it returned nothing for "I always buy Columbia…"
+# 5 times in a row in one session after getting it right in two others, so a rule backs it up.
+BRAND_STATEMENT = re.compile(r"(?i:\b(?:always|only|never|don'?t|do not|won'?t)\s+(?:buy|use|wear|get|go for|choose|pick|order)"
+                             r"\s+(?:anything\s+|any\s+|products?\s+)?(?:from\s+|by\s+)?)([A-Z][\w&'-]+(?:\s+[A-Z][\w&'-]+)*)")
+
+
 async def extract(message: str) -> PreferenceUpdate:
+    """The LLM's reading of the message, plus any explicit brand statement; merge() then decides the side
+    (prefer / avoid) of every item from the negation in its clause."""
     extractor = get_llm(reasoning=False).with_structured_output(PreferenceUpdate)
-    return await extractor.ainvoke([("system", EXTRACT_PROMPT), ("human", message)])
+    update = await extractor.ainvoke([("system", EXTRACT_PROMPT), ("human", message)])
+    found = {v.lower() for v in [*update.prefer, *update.avoid]}
+    update.prefer += [b for b in BRAND_STATEMENT.findall(message) if b.lower() not in found]
+    return update
 
 
 def _words(text: str) -> list:

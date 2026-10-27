@@ -56,6 +56,8 @@ class ShopState(MessagesState):
     query: str            # what the searcher sent to the catalogue
     candidates: list      # products the searcher found: [{item_id, title, category, text}]
     picks: list           # comparator's 3 picks: [{item_id, title, reason, quote, quote_ok}]
+    focus: int            # the shown product (1-3) the last details step was about, so "add it" means it; else 0
+    detail: dict          # what the details step did: {item_id, kind}
     searched: int         # how many results the searcher asked for (more when the shopper avoids something)
     dropped: int          # products removed because they name a brand or material the shopper avoids
     pending: dict         # the cart action waiting for the shopper's approval
@@ -219,8 +221,65 @@ NEW_NEED = re.compile(r"\b(need|needs|looking for|want|show me|find me|search fo
                       r"another|cheaper|different)\b", re.I)
 ABOUT_SHOWN = re.compile(r"\b(these|those|them|which (one|of)|one of|the (first|second|third|last|other)|"
                          r"(first|second|third) one|this one|that one|compare|difference|between)\b", re.I)
-ORDINALS = {1: r"\b(first|1st|number one|#1|option 1|no\.? ?1)\b", 2: r"\b(second|2nd|number two|#2|option 2|no\.? ?2)\b",
-            3: r"\b(third|3rd|number three|#3|option 3|no\.? ?3)\b"}
+ORDINALS = {n: rf"\b({word}|{nth}|number {spelled}|(number|option|item|product|no\.?) ?{n})\b|#\s?{n}\b"
+            for n, word, nth, spelled in ((1, "first", "1st", "one"), (2, "second", "2nd", "two"), (3, "third", "3rd", "three"))}
+# "I never buy anything from Munchkin" holds a cart word but is not a cart action (it once paused for the cart)
+NEGATED_CART = re.compile(r"\b(never|don'?t|do not|won'?t|wouldn'?t|not|no longer)\s+(\w+\s+){0,2}(buy|order|purchase)\b", re.I)
+DETAILS = re.compile(r"\b(details?|tell me (more|about)|more about|describe|description|more info\w*|specs?|specifications?)\b", re.I)
+SEVERAL = re.compile(r"\b(these|those|them|both|all|compare|difference|between|others?|which (one|of))\b", re.I)
+
+
+def shown_product(text: str, picks: list) -> int:
+    """The ONE shown product (1-3) a message points at, by position ("the third one", "#3", "item 3") or by
+    its title (three of its words in a row); 0 if it points at none, or at several."""
+    named = {n for n, pattern in ORDINALS.items() if n <= len(picks) and re.search(pattern, text, re.I)}
+    if named:                                               # a position is explicit: it wins over title words
+        return named.pop() if len(named) == 1 else 0
+    said = f" {normalise(text)} "
+    scores = []                                             # titles share phrases ("slim minimalist front
+    for p in picks:                                         # pocket wallet"), so the clearly best match wins
+        words = normalise(p["title"]).split()
+        scores.append(sum(f" {' '.join(words[i:i + 3])} " in said for i in range(len(words) - 2)))
+    best = max(scores, default=0)
+    return scores.index(best) + 1 if best and scores.count(best) == 1 else 0
+
+
+def wants_cart(text: str, position: int) -> bool:
+    """A cart action, not just a cart word: negated buying doesn't count, and neither does a message that
+    asks for something new without pointing at a shown product ("I need X, I never buy Y", "get me a cheaper one")."""
+    if not CART_WORDS.search(NEGATED_CART.sub(" ", text)):
+        return False
+    return bool(position or ABOUT_SHOWN.search(text)) or not NEW_NEED.search(text)
+
+
+class ProductAnswer(BaseModel):
+    answer: str = Field(description="one sentence answering the question from the product text, or exactly NOT STATED")
+    quote: str = Field(default="", description="a short phrase copied word for word from the product text that supports the answer")
+
+
+DETAILS_PROMPT = """You answer a shopper's question about ONE product, using only the product's title and description below (the title counts).
+Give a one-sentence answer and a short phrase copied word for word from the title or description that supports it.
+Only if neither the title nor the description answers the question, the answer is exactly NOT STATED and the quote is empty. Never guess."""
+QUESTION_FILLER = {"the", "and", "does", "did", "can", "could", "will", "would", "has", "have", "are", "was", "this",
+                   "that", "these", "those", "one", "first", "second", "third", "product", "item", "come", "with",
+                   "what", "which", "how", "much", "many", "there", "any", "for", "from", "made", "about", "its",
+                   "you", "your", "please", "tell", "know", "get", "number", "option"}
+
+
+def text_mentions(question: str, text: str, width: int = 60) -> str:
+    """A 4B model says NOT STATED when the answer is in a title ("Is it RFID blocking?" vs "…Wallet RFID Blocking…").
+    If every key word of the question is in the product text, return that passage of the text, word for word;
+    else ''. The reply then quotes the text instead of claiming yes or no."""
+    terms = [w for w in normalise(question).split() if len(w) >= 3 and w not in QUESTION_FILLER]
+    low = text.lower()
+    spots = [low.find(w) for w in terms]
+    if not terms or min(spots) < 0:
+        return ""
+    start, end = max(0, min(spots) - width), min(len(text), max(s + len(w) for s, w in zip(spots, terms)) + width)
+    if end - start > 4 * width:                             # far apart: just the first key word's surroundings
+        start, end = max(0, spots[0] - width), min(len(text), spots[0] + len(terms[0]) + width)
+    passage = text[start:end].strip(" .")
+    return ("…" if start else "") + passage + ("…" if end < len(text) else "")
 
 
 class CartChoice(BaseModel):
@@ -234,8 +293,9 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, mem
     Ablations: memory_on=False skips the Store; rewrite=False searches with the shopper's own words
     (the need analyst is skipped)."""
     tools = await get_tools(via)
-    search_tool = tools["search_products"]
+    search_tool, product_tool = tools["search_products"], tools["get_product"]
     router = get_llm(reasoning=False).with_structured_output(Route)
+    details_llm = get_llm(reasoning=False).with_structured_output(ProductAnswer)
     comparator_llm = get_llm(reasoning=comparator_reasoning)
     cart_resolver = get_llm(reasoning=False).with_structured_output(CartChoice)
 
@@ -261,11 +321,14 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, mem
 
     async def supervisor(state: ShopState) -> Command:
         t = time.perf_counter()
-        text = last_user_message(state)
+        text, picks = last_user_message(state), state.get("picks") or []
+        position = shown_product(text, picks)
         if not state.get("candidates"):
             route, why = "search", "rule: no products shown yet"
-        elif state.get("picks") and CART_WORDS.search(text):
-            route, why = "cart", "rule: cart word in the last message"
+        elif picks and wants_cart(text, position):
+            route, why = "cart", "rule: asks to add a shown product"
+        elif position and not SEVERAL.search(text) and (DETAILS.search(text) or not NEW_NEED.search(text)):
+            route, why = "details", f"rule: about product {position} only"
         elif NEW_NEED.search(text) and not ABOUT_SHOWN.search(text):
             route, why = "search", "rule: asks for something new"
         elif ABOUT_SHOWN.search(text) and not NEW_NEED.search(text):
@@ -277,9 +340,12 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, mem
                 f"Conversation so far:\n{conversation(state)}\n\n"
                 f"LAST shopper message: {text}\n\nChoose the step for the LAST message only.")
             route, why = decision.next, "LLM router"
-        node = {"search": "need_analyst", "compare": "comparator", "cart": "cart"}[route]
+        node = {"search": "need_analyst", "compare": "comparator", "details": "details", "cart": "cart"}[route]
         timings = {**state["timings"], "supervisor": time.perf_counter() - t}
-        return Command(goto=node, update={"route": f"{route} ({why})", "timings": timings})
+        update = {"route": f"{route} ({why})", "timings": timings}
+        if route == "details":
+            update["focus"] = position
+        return Command(goto=node, update=update)
 
     async def need_analyst(state: ShopState):
         t = time.perf_counter()
@@ -361,14 +427,51 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, mem
         if n < 3 and not question and (prefs["avoid"] or prefs["avoid_brands"]):
             final = (f"Only {n} of the products I found avoid {' and '.join(prefs['avoid'] + prefs['avoid_brands'])}.\n"
                      + final)
-        return {"picks": picks, "final": final, "messages": [AIMessage(final)], "dropped": dropped,
+        return {"picks": picks, "final": final, "messages": [AIMessage(final)], "dropped": dropped, "focus": 0,
                 "timings": {**state["timings"], "comparator": time.perf_counter() - t}}
+
+    async def details(state: ShopState):
+        """One shown product: its description from the catalogue (the get_product tool), or the answer to a
+        question about it, backed by a quote checked against its text. The picks stay, so "add it" works."""
+        t = time.perf_counter()
+        text, pick = last_user_message(state), state["picks"][state["focus"] - 1]
+        product = json.loads(tool_text(await product_tool.ainvoke({"item_id": pick["item_id"]})))
+        title, body = product["title"], product["text"]
+        about = body[len(title):].strip(" .") if body.startswith(title) else body
+        excerpt = about if len(about) <= 700 else about[:700].rsplit(" ", 1)[0] + " …"
+        only_title = "The catalogue has only this product's title, no description."
+        kind = "description"
+        if text.rstrip().endswith("?") and not DETAILS.search(text):
+            try:
+                out = await details_llm.ainvoke([SystemMessage(DETAILS_PROMPT), HumanMessage(
+                    f"Question about this product: {text}\n\nTitle: {title}\nDescription: {about[:4000] or '(none)'}")])
+                stated = not out.answer.strip().upper().startswith("NOT STATED") and quote_in_text(out.quote, body)
+            except Exception:                               # an unusable reply counts as "not stated"
+                stated = False
+            passage = "" if stated else text_mentions(text, body)
+            if stated:
+                kind = "answered, quote found in the text"
+                final = f"About {title}:\n{first_sentence(out.answer)}\nFrom the product description: \"{out.quote}\""
+            elif passage:
+                kind = "quoted the passage that mentions it"
+                final = f"About {title}, the product text says:\n\"{passage}\""
+            else:
+                kind = "not stated in the text"
+                final = (f"The text of {title} doesn't say. " +
+                         (f"Here is what its description does say:\n{excerpt}" if excerpt else only_title))
+        else:
+            final = f"{title}\nCategory: {product['category']}\n{excerpt or only_title}"
+        final += "\nShall I add it to your cart, or compare it with the others?"
+        return {"final": final, "messages": [AIMessage(final)], "detail": {"item_id": pick["item_id"], "kind": kind},
+                "timings": {**state["timings"], "details": time.perf_counter() - t}}
 
     async def cart(state: ShopState, config: RunnableConfig) -> Command:
         """Work out WHICH shown product the shopper wants; never touches the cart itself."""
         t = time.perf_counter()
         text, picks = last_user_message(state), state.get("picks") or []
-        position = next((n for n, pattern in ORDINALS.items() if re.search(pattern, text, re.I)), 0)
+        position = shown_product(text, picks)
+        if not position and state.get("focus") and re.search(r"\b(it|this|that)\b", text, re.I):
+            position = state["focus"]                       # "add it" right after the details of one product
         quantity = 1
         if not position and picks:
             numbered = "\n".join(f"{i}. {p['title']}" for i, p in enumerate(picks, 1))
@@ -408,10 +511,11 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, mem
 
     g = StateGraph(ShopState)
     g.add_node("remember", remember)
-    g.add_node("supervisor", supervisor, destinations=("need_analyst", "comparator", "cart"))
+    g.add_node("supervisor", supervisor, destinations=("need_analyst", "comparator", "details", "cart"))
     g.add_node("need_analyst", need_analyst)
     g.add_node("searcher", searcher)
     g.add_node("comparator", comparator)
+    g.add_node("details", details)
     g.add_node("cart", cart, destinations=("approval", END))
     g.add_node("approval", approval)
     g.add_edge(START, "remember")
@@ -419,6 +523,7 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, mem
     g.add_edge("need_analyst", "searcher")
     g.add_edge("searcher", "comparator")
     g.add_edge("comparator", END)
+    g.add_edge("details", END)
     g.add_edge("approval", END)
     graph = g.compile(checkpointer=checkpointer or InMemorySaver(), store=store or InMemoryStore())
     graph.via, graph.comparator_reasoning, graph.memory_on, graph.rewrite = via, comparator_reasoning, memory_on, rewrite
@@ -456,6 +561,10 @@ def step_line(graph, node: str, delta: dict, state: dict) -> str:
         dropped = f" · removed {delta['dropped']} that the shopper avoids" if delta.get("dropped") else ""
         return (f"  [comparator]   picks {[p['item_id'] for p in delta['picks']]} · "
                 f"quotes found in product text {ok}/{len(delta['picks'])}{dropped}  ({s:.1f}s)")
+    if node == "details":
+        d = delta.get("detail") or {}
+        return (f"  [details]      get_product(item_id={d.get('item_id')!r}) via {graph.via.upper()} → "
+                f"{d.get('kind')}  ({s:.1f}s)")
     if node == "cart":
         d = delta.get("pending")
         return f"  [cart]         {'wants ' + str(d['quantity']) + ' × ' + _short(d['title'], 60) if d else 'unclear which product'}  ({s:.1f}s)"

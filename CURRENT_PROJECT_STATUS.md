@@ -286,7 +286,12 @@ Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (8.1–8.8). Built while the
 
 - [x] `app.py` (Gradio 6.30): chat; **agent trace streaming step by step**; **Approve / Reject** buttons when a cart action pauses (or type yes / no); remembered preferences, cart and approval log per shopper; New conversation / Forget my preferences; MCP ↔ local switch. Run: `.venv/bin/python app.py` → http://127.0.0.1:7860 (`--share` for a public link).
 - [x] Runs the **same graph** as the notebook. `graph.py` now yields its trace lines (`stream_turn`), and the notebook prints them exactly as before.
-- [x] Tested through the app's own HTTP API: **16/16 checks**: streaming, vegan filter, approve button, typed "no", MCP→local mid-conversation, memory across conversations, forget, two shoppers in two sessions. First reply 4.1 s (graph built when the page opens; was 14.2 s). Browser screenshots (desktop + phone) checked the layout; fixed the trace wrapping, a duplicated cart question and squeezed table columns.
+- [x] **Fixes from your try-out** (screenshots, 2026-10-27; `DECISION_LOG.md` 8.9–8.12):
+  - "I'm allergic to latex and I **never buy** anything from Munchkin. I need …" paused for the cart (the word "buy"). Negated buying and new requests are no longer cart actions; the 8 adversarial messages still all pause.
+  - "more details on third item" re-ranked all three, and naming a product by its title started a new search. New **details** step: one shown product (by position or by its title) is fetched with `get_product` and described, or a question about it is answered with a quote checked against its text; if the text is silent it says so. "Add it" then adds that product.
+  - "I always buy Columbia" was not remembered (the 4B extractor returned nothing 5/5 times in that session). A rule now backs up explicit brand statements: 8/8 test messages right.
+  - Routing test: **34/34** in both contexts (8 new cases).
+- [x] Tested through the app's own HTTP API: **21/21 checks** (16 + 5 for the reported cases); before the fixes: **16/16 checks**: streaming, vegan filter, approve button, typed "no", MCP→local mid-conversation, memory across conversations, forget, two shoppers in two sessions. First reply 4.1 s (graph built when the page opens; was 14.2 s). Browser screenshots (desktop + phone) checked the layout; fixed the trace wrapping, a duplicated cart question and squeezed table columns.
 
 ## Findings / notes
 

@@ -73,6 +73,7 @@ shopper ──► remember ──► supervisor ──► need analyst ──►
             (Store)          │                            (tool node)  (top 3 + reason
                              │                                │         + verbatim quote)
                              ├──────────────────────────────────────► comparator ──► END   "which of these…?"
+                             ├──► details (get_product) ─────────────────────────► END     "more about the third one"
                              └──► cart ──► approval ──► add_to_cart ─────────────► END     "add the second one"
                                            interrupt(): shopper says yes / no
                                                               │
@@ -87,10 +88,11 @@ Memory:  checkpointer (this conversation, thread_id)  +  Store (shopper preferen
 
 > [!note] Node roles
 > - **Remember** — keeps lasting preferences (prefer / avoid / avoided brands / budget) in the Store; a cue-gated LLM extractor plus code rules for grounding, polarity and brands
-> - **Supervisor** — rules first (no products shown yet → search; products shown + cart words → cart; a clear new request → search; a clear question about the shown products → compare), then an LLM router (structured output) for the rest, choosing *search* or *compare*. The LLM can never route to the cart
+> - **Supervisor** — rules first (no products shown yet → search; a request to add a shown product → cart; a message about ONE shown product → details; a clear new request → search; a clear question about the shown products → compare), then an LLM router (structured output) for the rest, choosing *search* or *compare*. The LLM can never route to the cart
 > - **Need analyst** — rewrites the long request into a structured query (product type, must-haves, category)
 > - **Searcher** — a tool node (no LLM): calls `search_products` over MCP or locally (BLaIR · hybrid RRF · Qwen3 re-rank). When the shopper avoids a brand or material, it fetches 30, drops the avoided ones and keeps the best 10 (fails closed)
 > - **Comparator** — picks the top 3 from the candidates with a reason and a **verbatim quote** from the product text; unsupported claims are cut. The reply is rendered from these picks (no separate writer)
+> - **Details** *(Phase 8)* — one shown product, fetched with `get_product`: its description, or the answer to a question about it backed by a quote checked against its text ("doesn't say" when the text is silent)
 > - **Cart → approval** — cart works out *which* product is meant; approval pauses with `interrupt()` and calls `add_to_cart` only on an explicit yes
 
 ---
@@ -225,7 +227,8 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 - **Done when** · full results table + error analysis written up; success target met or the miss explained
 
 ### Phase 8 — Stretch Goals (top marks)
-- [x] **Web app (Gradio)** — `app.py`: chat, live agent trace, Approve / Reject at the cart, preferences, cart, approval log, MCP/local switch; runs the same graph as the notebook (branch `phase-8-app`, `DECISION_LOG.md` 8.1–8.8). Tested: 16/16 end-to-end checks through the app's HTTP API + browser screenshots (desktop, phone)
+- [x] **Web app (Gradio)** — `app.py`: chat, live agent trace, Approve / Reject at the cart, preferences, cart, approval log, MCP/local switch; runs the same graph as the notebook (branch `phase-8-app`, `DECISION_LOG.md` 8.1–8.8). Tested: 21/21 end-to-end checks through the app's HTTP API + browser screenshots (desktop, phone)
+- [x] Fixes from trying the app (8.9–8.12): "I never buy X" no longer triggers the cart; a **details** step for one shown product (`get_product`, quoted answers); explicit brand statements remembered by rule
 - [x] BLaIR embedder vs. general embedders — **done and adopted** (plus re-ranker comparison; notebook §5b *Retrieval model upgrade*)
 - [ ] LoRA-tuned need analyst
 - **Builds on** · Module 4 · Agentic_app (Streamlit reference; Gradio used, see 8.2)

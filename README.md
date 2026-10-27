@@ -13,25 +13,19 @@ Course group project **P14** (UG3/UG4, Modules 1–4).
 ## How it works
 
 ```
-shopper
-   │
-   ▼
-┌─────────────┐
-│  Supervisor │  routes each turn to ONE specialist
-└──────┬──────┘
-       ├──────────────┬───────────────┬──────────────┐
-       ▼              ▼               ▼              ▼
-  Need analyst     Searcher       Comparator       Cart
-  long request →   hybrid RAG     top 3 + reasons  add_to_cart?
-  structured       over the       quoted from the  ─► interrupt()
-  query            catalogue      product text     ─► shopper approves
-                      │
-              ┌───────┴────────┐
-              ▼                ▼
-         MCP server       local @tool      ← same tools, two transports
-                                              (compared for latency)
-
-Memory: checkpointer (this chat) + Store (shopper preferences: brands, budget, dislikes)
+shopper ──► remember ──► supervisor ──► need analyst ──► searcher ──► comparator ──► END   a new request
+            (Store)          │                           (search_products) (top 3 + reasons
+                             │                                │             quoted from the text)
+                             ├─────────────────────────────────────────► comparator ──► END   "which of these…?"
+                             ├──► details (get_product) ─────────────────────────────► END   "more about the third one"
+                             └──► cart ──► approval ──► add_to_cart ─────────────────► END   "add the second one"
+                                           interrupt(): the shopper says yes / no
+                                                                │
+                                                  ┌─────────────┴─────────────┐
+                                                  ▼                           ▼
+                                           MCP server (HTTP)            local tools      ← same functions,
+                                                                                            two transports
+Memory: checkpointer (this conversation) + Store (shopper preferences: brands, materials, budget)
 ```
 
 | Component | Choice |
