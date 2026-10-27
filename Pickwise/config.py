@@ -13,6 +13,13 @@ SEED = 42
 QUICK_RUN = os.getenv("PICKWISE_QUICK_RUN", "0") == "1"
 QUICK_N = 100
 
+# --- Recorded LLM outputs (Phase 9): replayed unless recomputing -----------------------------------
+# The LLM batch work (1,000 need analyses, the reasoning check, smoke tests, the end-to-end runs and the
+# judge) takes ~10 h on a T4. Its outputs are committed in recorded/ and copied into DATA_DIR's caches,
+# so a fresh run reproduces every number; PICKWISE_RECOMPUTE=1 starts from empty caches instead.
+RECOMPUTE = os.getenv("PICKWISE_RECOMPUTE", "0") == "1"
+RECORDED_DIR = ROOT / "recorded"
+
 # --- Data (brief §02) -----------------------------------------------------------------------------
 DATASET_ID = "McAuley-Lab/Amazon-C4"
 CATALOGUE_FILE = f"hf://datasets/{DATASET_ID}/sampled_item_metadata_1M.jsonl"

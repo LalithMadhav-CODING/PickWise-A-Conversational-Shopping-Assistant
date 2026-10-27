@@ -1,0 +1,16 @@
+setting,Recall@10,MRR,nDCG@10,Recall@50,Recall@100
+"lab models · hybrid + re-rank (ms-marco, top 50)",0.475,0.260,0.305,0.585,0.660
+bge-small-en-v1.5 · dense · raw request,0.465,0.279,0.318,0.595,0.655
+bge-small-en-v1.5 · dense,0.445,0.277,0.309,0.615,0.670
+blair-roberta-base · dense · raw request,0.610,0.364,0.417,0.760,0.795
+blair-roberta-base · dense,0.580,0.341,0.391,0.730,0.775
+Qwen3-Embedding-0.6B · dense · raw request,0.465,0.302,0.335,0.625,0.710
+Qwen3-Embedding-0.6B · dense,0.485,0.314,0.349,0.645,0.695
+"bge-small · hybrid + re-rank (Qwen3-Reranker, top 20)",0.480,0.335,0.366,0.585,0.660
+"BLaIR · hybrid + re-rank (ms-marco-MiniLM-L-6-v2, top 20)",0.580,0.300,0.361,0.715,0.750
+"BLaIR · hybrid + re-rank (bge-reranker-base, top 20)",0.525,0.270,0.321,0.715,0.750
+"BLaIR · hybrid + re-rank (bge-reranker-v2-m3, top 20)",0.585,0.335,0.388,0.715,0.750
+"BLaIR · hybrid + re-rank (Qwen3-Reranker-0.6B, top 20)",0.590,0.381,0.426,0.715,0.750
+"BLaIR · hybrid + re-rank (Qwen3-Reranker, top 10)",0.505,0.353,0.381,0.715,0.750
+"BLaIR · hybrid + re-rank (Qwen3-Reranker, top 30)",0.575,0.375,0.417,0.715,0.750
+"BLaIR · hybrid + re-rank (Qwen3-Reranker, top 50)",0.575,0.377,0.418,0.715,0.750

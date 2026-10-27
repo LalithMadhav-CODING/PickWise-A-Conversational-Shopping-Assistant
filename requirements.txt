@@ -5,9 +5,7 @@ pyarrow
 sentence-transformers
 faiss-cpu
 rank-bm25
-langchain-community
 langchain-text-splitters
-langchain-huggingface
 
 # Agents + harness (Module 4 lab stack)
 langgraph>=0.6
@@ -18,15 +16,9 @@ mcp>=1.10
 ollama
 pydantic
 
-# Fine-tuning stretch (Module 1/2)
-transformers
-accelerate
-peft
-outlines
-
 # Notebook
-matplotlib
 ipykernel
+nbclient
 
 # Web app stretch (app.py; the Module 4 Agentic_app idea, with Gradio)
 gradio>=6
