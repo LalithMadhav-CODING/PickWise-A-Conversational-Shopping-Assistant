@@ -17,7 +17,7 @@ Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_P
 | 6 — Demo Cell | ✅ done 2026-10-27 (branch `phase-6-demo`) |
 | 7 — Evaluation | ✅ done 2026-10-27 (branch `phase-7-evaluation`): target pre-registered (`b1a7130`) before the runs |
 | 8 — Stretch Goals | 🟡 web app ✅ 2026-10-27 (branch `phase-8-app`), BLaIR ✅, LoRA ⚪ |
-| 9 — Colab T4 / CPU | ⚪ after Phase 7 (agreed order) |
+| 9 — Colab T4 / CPU | ✅ 2026-10-27 (branch `phase-9-colab`): fresh clone runs on GPU (14.5 min) and CPU-only (2 h 29 min); one Colab run by the team |
 
 **Milestone M1 (Data + Retrieval): ✅** catalogue built; 4 retrieval variants scored. **M2 (Need analyst): ✅** rewriting vs raw measured on test; reasoning mode confirmed on dev. **Stretch: BLaIR embedder ✅** (adopted, with Qwen3-Reranker).
 
@@ -310,6 +310,16 @@ Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (7.1–7.8), **written and p
 - [x] Talk slides + `TALK_OUTLINE.md` with the final numbers.
 - [ ] **Team:** fill `evaluation/human_check_faithfulness.csv` (30 rows, blind to the judge).
 
+## Phase 9 — Colab T4 / CPU ✅ (branch `phase-9-colab`)
+
+Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (9.1–9.7).
+
+- [x] Recorded LLM outputs (`recorded/`, 3.3 MB) replayed at the start; `PICKWISE_RECOMPUTE=1` recomputes everything.
+- [x] Quick mode: recorded model-comparison table, the first 100 of the recorded end-to-end answers.
+- [x] Colab setup cell (clone, Ollama, qwen3:4b); requirements trimmed to what the code imports.
+- [x] Fresh clone, empty data folder, quick mode: **14.5 min** cold on our GPU (9.4 warm); **CPU-only 2 h 29 min** (24-core desktop); no errors in either.
+- [ ] **Team:** time one real Colab T4 run (estimated ≈ 40 min), after merging the branches into `main` and making the repo reachable (public or a token).
+
 ## Findings / notes
 
 - Catalogue jsonl schema: `{"item_id", "category", "metadata"}` — `metadata` is one string, title first. Short items often look like `"Her Leaves Remain. ."`.
@@ -331,3 +341,4 @@ See *Plan Review — Open Issues* in `P14_Project_Plan.md`. Resolved so far: #2 
 - 2026-10-27 — **Phase 6 built** on branch `phase-6-demo`: `ask()` / `chat()` demo; fixes for compare scope, unsupported avoidance claims, deterministic avoid-filter (same turn), router can't pick cart.
 - 2026-10-27 — **Phase 6 verification run** found 3 more bugs, all fixed (6.8–6.10): the avoid filter failed open, the LLM router sent a new request to compare, the clause stripper broke grammar. Demo belt request reworded (6.11). `P14_Project_Plan.md` brought fully up to date (diagram, success target, Phase 7 plan, Phase 9, milestones, risks, checklist).
 - 2026-10-27 — **Phase 6 pushed** (`c1372fe`). **Phase 8 web app built** (`app.py`, branch `phase-8-app`): 16/16 end-to-end checks.
+- 2026-10-27 — **Phase 7 pushed** (`20c2a2d`): results table, error analysis, limitations, talk outline. **Phase 9**: recorded LLM outputs replayed; fresh-clone runs verified on GPU (14.5 min) and CPU-only (2 h 29 min).

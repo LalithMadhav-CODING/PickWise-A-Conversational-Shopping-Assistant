@@ -130,30 +130,25 @@ Baselines: BM25 and dense retrieval on the raw request, and a single ReAct agent
 | 6 — Demo | ✅ (branch `phase-6-demo`) |
 | 7 — Evaluation | ✅ (branch `phase-7-evaluation`) |
 | 8 — Stretch: web app ✅ (branch `phase-8-app`), BLaIR embedder ✅, LoRA need analyst ⚪ | 🟡 |
-| 9 — Colab T4 / CPU | ⚪ after Phase 7 |
+| 9 — Colab T4 / CPU | ✅ (branch `phase-9-colab`): fresh clone verified on GPU and CPU-only; Colab timing to confirm |
 
 Detailed progress, decisions and numbers: [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md) · Full plan: [`P14_Project_Plan.md`](P14_Project_Plan.md)
 
 ## Quick start
 
-Requirements: Python ≥ 3.10, [Ollama](https://ollama.com), about 4 GB of disk, and internet on the first run.
+| Where | How | Time (quick run) |
+|---|---|---|
+| **Free Colab T4** | Runtime → T4 GPU; upload `P14_Shopping_Assistant.ipynb`; first cell `%env PICKWISE_QUICK_RUN=1` (and `%env PICKWISE_REPO=https://<token>@github.com/…` while this repo is private); *Run all*. The notebook clones the code, installs Ollama and pulls qwen3:4b itself. | ≈ 40 min (estimated) |
+| Laptop / workstation (GPU) | see below | 14.5 min cold, 9.4 min warm (RTX 4000 Ada) |
+| Laptop CPU only | see below; `PICKWISE_RETRIEVAL=dense` keeps searches fast | 2 h 29 min cold on a 24-core desktop CPU (mostly the Qwen3 re-ranker); longer on a typical laptop |
 
 ```bash
-# 1. Model
-ollama pull qwen3:4b
-
-# 2. Python environment
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-
-# 3. Run the notebook end to end, with a live log (watch it with: tail -f notebook_run.log)
-.venv/bin/python run_notebook.py
-#    or open it in Jupyter / VS Code with the .venv kernel
+ollama pull qwen3:4b                                   # https://ollama.com
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+PICKWISE_QUICK_RUN=1 .venv/bin/python run_notebook.py  # live log: tail -f notebook_run.log
 ```
 
-The first run streams the 640 MB catalogue file (≈ 3 min), embeds the catalogue and analyses 1,000 requests with the LLM (≈ 15 min on a GPU, plus about an hour for the reasoning-on comparison), and embeds the catalogue with three embedders for the model comparison. Everything is cached in `data/`; a re-run then takes about 30 min on a GPU, mostly re-ranking. Set `PICKWISE_QUICK_RUN=1` for a 100-query test subset.
-
-Running on a free Colab T4 or a laptop CPU (a requirement of the brief) is not verified yet: that is Phase 9, after the evaluation.
+**Recorded LLM outputs.** The LLM batch work would take ~10 h on a T4: 1,000 need analyses, the reasoning check, the smoke tests, the end-to-end runs and the judge. Its outputs are in `recorded/` and are replayed, so every reported number comes out the same. Everything else runs live: the catalogue, embeddings, searches, metrics, demo, memory test and cart attacks. `PICKWISE_RECOMPUTE=1` recomputes everything (about 5 h on our GPU). Without `PICKWISE_QUICK_RUN` the notebook uses all 800 test requests and recomputes the model comparison: ~35 min on our GPU.
 
 ### Settings
 
@@ -162,7 +157,8 @@ All settings live in [`Pickwise/config.py`](Pickwise/config.py). Overrides:
 | Variable | Default |
 |---|---|
 | `PICKWISE_MODEL` | `qwen3:4b` |
-| `PICKWISE_QUICK_RUN` | `0` |
+| `PICKWISE_QUICK_RUN` | `0` (`1`: 100 test requests, recorded model comparison) |
+| `PICKWISE_RECOMPUTE` | `0` (`1`: recompute the recorded LLM outputs instead of replaying them) |
 | `PICKWISE_DATA_DIR` | `./data` |
 | `PICKWISE_RETRIEVAL` | `hybrid+rerank` (or `dense`: BLaIR only, ~5 ms per search, same test MRR; good for CPU) |
 | `PICKWISE_MCP_PORT` | `8766` |
@@ -189,6 +185,7 @@ Pickwise/                      reusable code imported by the notebook, MCP serve
   memory.py                    long-term memory: shopper preferences in the LangGraph Store
   cart.py                      add_to_cart (only after approval) + audit log
 app.py                         the web app (Gradio): chat, live trace, approve / reject at the cart
+recorded/                      recorded LLM outputs, replayed so the notebook runs on a T4 / CPU
 requirements.txt
 run_notebook.py                runs the notebook top to bottom with a live per-cell log
 P14_Project_Plan.md            build plan, risks, open issues

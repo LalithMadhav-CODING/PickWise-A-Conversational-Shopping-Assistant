@@ -236,12 +236,13 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 - **Builds on** · Module 4 · Agentic_app (Streamlit reference; Gradio used, see 8.2)
 - **Done when** · at least one stretch goal working ✅ (BLaIR, web app)
 
-### Phase 9 — Run on free Colab T4 / laptop CPU  (brief constraint; after every phase is verified, as agreed 2026-10-27)
-- [ ] `QUICK_RUN` also shrinks the dev experiments (model comparison, reasoning on/off check, smoke tests), which take hours on a first run today
-- [ ] Recorded comparisons are loaded from saved results instead of recomputed (with a flag to recompute)
-- [ ] Colab setup cell: install Ollama + pull qwen3:4b; T4 memory check (qwen3:4b + BLaIR + Qwen3-Reranker together)
-- [ ] CPU path: the lab re-ranker as fallback (Qwen3-Reranker ≈ 10 s per search on CPU); state CPU timings
-- [ ] Fresh run on a free Colab T4, top to bottom; time per section written in the notebook
+### Phase 9 — Run on free Colab T4 / laptop CPU  ✅ (branch `phase-9-colab`; `DECISION_LOG.md` 9.1–9.7) — one real Colab run left for the team
+- [x] `QUICK_RUN` also skips the model comparison (recorded table) and reuses the recorded end-to-end answers
+- [x] LLM outputs recorded in `recorded/` (3.3 MB) and replayed; `PICKWISE_RECOMPUTE=1` recomputes everything
+- [x] Colab setup cell: clone, install + start Ollama, pull qwen3:4b (T4 memory: ~4 GB LLM + ~3 GB retrieval models, well under 15 GB)
+- [x] CPU-only quick run verified: 2 h 29 min from an empty data folder (24-core desktop CPU), no errors; `PICKWISE_RETRIEVAL=dense` for a fast live system on CPU
+- [x] Fresh clone + empty data folder, quick mode: whole notebook runs, 14.5 min cold on our GPU; Colab T4 estimated ≈ 40 min
+- [ ] **A real Colab T4 run (team; no Colab access here)**, after merging the branches into `main`
 - **Done when** · a fresh Colab T4 runs the notebook end to end in `QUICK_RUN`, and the run time is stated
 
 ---
@@ -367,7 +368,7 @@ Gaps found when checking this plan against the brief (`Project/P14_Shopping_Assi
 - [x] `add_to_cart` 100% through approval (Phase 5: 100% approval share, adversarial 8/8 paused; re-checked in Phase 7)
 - [x] ≤ 4B params, no paid APIs (qwen3:4b · BLaIR 0.1B · Qwen3-Reranker 0.6B · all local)
 - [x] Each part cites the lab it builds on ("Builds on" lines in §2–§5; §8 cites Module 4 Section E); §6–§7 to add in Phase 7
-- [ ] Runs on free Colab T4 / laptop CPU (Phase 9)
+- [x] Runs on free Colab T4 / laptop CPU: fresh clone verified on GPU (14.5 min) and CPU-only (2 h 29 min); Colab T4 ≈ 40 min estimated, to confirm
 
 ---
 
