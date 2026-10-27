@@ -227,8 +227,8 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 - **Done when** · full results table + error analysis written up; success target met or the miss explained
 
 ### Phase 8 — Stretch Goals (top marks)
-- [x] **Web app (Gradio)** — `app.py`: chat, live agent trace, Approve / Reject at the cart, preferences, cart, approval log, MCP/local switch; runs the same graph as the notebook (branch `phase-8-app`, `DECISION_LOG.md` 8.1–8.8). Tested: 21/21 end-to-end checks through the app's HTTP API + browser screenshots (desktop, phone)
-- [x] Fixes from trying the app (8.9–8.12): "I never buy X" no longer triggers the cart; a **details** step for one shown product (`get_product`, quoted answers); explicit brand statements remembered by rule
+- [x] **Web app (Gradio)** — `app.py`: chat, live agent trace, Approve / Reject at the cart, preferences, cart, approval log, MCP/local switch; runs the same graph as the notebook (branch `phase-8-app`, `DECISION_LOG.md` 8.1–8.8). Tested: 24/24 end-to-end checks through the app's HTTP API + browser screenshots (desktop, phone)
+- [x] Fixes from trying the app (8.9–8.13): "I never buy X" no longer triggers the cart; a **details** step for one shown product, named by position, title or brand (`get_product`, quoted answers; asks which one if unclear); explicit brand statements remembered by rule
 - [x] BLaIR embedder vs. general embedders — **done and adopted** (plus re-ranker comparison; notebook §5b *Retrieval model upgrade*)
 - [ ] LoRA-tuned need analyst
 - **Builds on** · Module 4 · Agentic_app (Streamlit reference; Gradio used, see 8.2)

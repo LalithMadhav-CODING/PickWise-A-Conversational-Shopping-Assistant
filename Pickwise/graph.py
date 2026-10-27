@@ -202,7 +202,7 @@ def render(picks: list, need: dict, question: str = None) -> str:
             lines.append(f'   From the product description: "{p["quote"]}"')
         if p.get("unknown"):
             lines.append(f"   Note: the description doesn't mention {' or '.join(p['unknown'])}, so please check before buying.")
-    lines.append("Would you like more details on one of them, or shall I add one to your cart?")
+    lines.append("Want more details on one of them (say e.g. \"more about #2\"), or shall I add one to your cart?")
     return "\n".join(lines)
 
 
@@ -226,20 +226,30 @@ ORDINALS = {n: rf"\b({word}|{nth}|number {spelled}|(number|option|item|product|n
 # "I never buy anything from Munchkin" holds a cart word but is not a cart action (it once paused for the cart)
 NEGATED_CART = re.compile(r"\b(never|don'?t|do not|won'?t|wouldn'?t|not|no longer)\s+(\w+\s+){0,2}(buy|order|purchase)\b", re.I)
 DETAILS = re.compile(r"\b(details?|tell me (more|about)|more about|describe|description|more info\w*|specs?|specifications?)\b", re.I)
-SEVERAL = re.compile(r"\b(these|those|them|both|all|compare|difference|between|others?|which (one|of))\b", re.I)
+SEVERAL = re.compile(r"\b(these|those|them|both|all|compare|difference|between|others?|which (one|of)|better|"
+                     r"best|worse|worst|most|least|than)\b|^\s*which\b", re.I)
+NOT_A_NAME = {"more", "details", "detail", "describe", "description", "info", "information", "specs", "show", "want",
+              "need", "like", "please", "good", "great", "new", "set", "pack", "kids", "men", "women", "adults"}
 
 
 def shown_product(text: str, picks: list) -> int:
-    """The ONE shown product (1-3) a message points at, by position ("the third one", "#3", "item 3") or by
-    its title (three of its words in a row); 0 if it points at none, or at several."""
+    """The ONE shown product (1-3) a message points at: by position ("the third one", "#3", "item 3"), else
+    by its title: three of its words in a row (2 points each), or a word only its title has (1 point): its
+    first word, usually the brand ("Arulis", "SGOTA"), or, when the message asks for details, any such word
+    ("tell me about the shark"). Attribute words in a question ("made of metal?", "in black?") don't count
+    otherwise. The clearly best-scoring product wins; 0 if none, or a tie."""
     named = {n for n, pattern in ORDINALS.items() if n <= len(picks) and re.search(pattern, text, re.I)}
     if named:                                               # a position is explicit: it wins over title words
         return named.pop() if len(named) == 1 else 0
-    said = f" {normalise(text)} "
-    scores = []                                             # titles share phrases ("slim minimalist front
-    for p in picks:                                         # pocket wallet"), so the clearly best match wins
-        words = normalise(p["title"]).split()
-        scores.append(sum(f" {' '.join(words[i:i + 3])} " in said for i in range(len(words) - 2)))
+    said, said_words = f" {normalise(text)} ", set(normalise(text).split())
+    titles = [normalise(p["title"]).split() for p in picks]
+    asks_details = bool(DETAILS.search(text))
+    scores = []
+    for words in titles:                                    # titles share phrases ("slim minimalist front pocket
+        grams = sum(f" {' '.join(words[i:i + 3])} " in said for i in range(len(words) - 2))   # wallet")
+        own = {w for i, w in enumerate(words) if (i == 0 or asks_details) and len(w) >= 3 and w not in NOT_A_NAME
+               and w not in QUESTION_FILLER and sum(w in t for t in titles) == 1}
+        scores.append(2 * grams + len(own & said_words))
     best = max(scores, default=0)
     return scores.index(best) + 1 if best and scores.count(best) == 1 else 0
 
@@ -329,6 +339,8 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, mem
             route, why = "cart", "rule: asks to add a shown product"
         elif position and not SEVERAL.search(text) and (DETAILS.search(text) or not NEW_NEED.search(text)):
             route, why = "details", f"rule: about product {position} only"
+        elif picks and DETAILS.search(text) and not SEVERAL.search(text):
+            route, why = "details", "rule: asks for details, product unclear"    # ask which, don't re-rank
         elif NEW_NEED.search(text) and not ABOUT_SHOWN.search(text):
             route, why = "search", "rule: asks for something new"
         elif ABOUT_SHOWN.search(text) and not NEW_NEED.search(text):
@@ -434,6 +446,11 @@ async def build_system(via: str = "mcp", comparator_reasoning: bool = False, mem
         """One shown product: its description from the catalogue (the get_product tool), or the answer to a
         question about it, backed by a quote checked against its text. The picks stay, so "add it" works."""
         t = time.perf_counter()
+        if not state.get("focus"):                          # "more details" without saying which product
+            numbered = "\n".join(f"{i}. {p['title']}" for i, p in enumerate(state["picks"], 1))
+            final = f"Which one would you like to know more about?\n{numbered}\n(say e.g. \"more about #2\")"
+            return {"final": final, "messages": [AIMessage(final)], "detail": {"item_id": None, "kind": "asked which product"},
+                    "timings": {**state["timings"], "details": time.perf_counter() - t}}
         text, pick = last_user_message(state), state["picks"][state["focus"] - 1]
         product = json.loads(tool_text(await product_tool.ainvoke({"item_id": pick["item_id"]})))
         title, body = product["title"], product["text"]
@@ -563,6 +580,8 @@ def step_line(graph, node: str, delta: dict, state: dict) -> str:
                 f"quotes found in product text {ok}/{len(delta['picks'])}{dropped}  ({s:.1f}s)")
     if node == "details":
         d = delta.get("detail") or {}
+        if not d.get("item_id"):
+            return f"  [details]      no product named → asked which one  ({s:.1f}s)"
         return (f"  [details]      get_product(item_id={d.get('item_id')!r}) via {graph.via.upper()} → "
                 f"{d.get('kind')}  ({s:.1f}s)")
     if node == "cart":
