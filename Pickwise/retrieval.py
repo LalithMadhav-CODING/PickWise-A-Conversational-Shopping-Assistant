@@ -62,6 +62,15 @@ def get_embedder(name: str = config.EMBED_MODEL):
 
 
 @lru_cache(maxsize=2)
+def release_gpu_memory() -> None:
+    """Hand PyTorch's cached-but-unused GPU memory back after a big batch. Ollama and the MCP server share the
+    GPU with this process: on a 15 GB Colab T4 the cache held after embedding the catalogue (~2 GB) left no
+    room to load the LLM (DECISION_LOG 9.8)."""
+    import torch
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 def get_reranker(name: str = config.RERANK_MODEL):
     import torch
     from sentence_transformers import CrossEncoder
@@ -153,6 +162,7 @@ class Retriever:
             return np.load(path)
         vectors = get_embedder(self.embed_model).encode(
             self.texts, batch_size=128, normalize_embeddings=True, convert_to_numpy=True).astype("float32")
+        release_gpu_memory()
         path.parent.mkdir(parents=True, exist_ok=True)
         np.save(path, vectors)
         return vectors
@@ -215,6 +225,7 @@ class Retriever:
         texts = self.catalogue["text"].str.slice(0, 2000).to_numpy()     # the model truncates at 512 tokens anyway
         pairs = [(q, texts[i]) for q, ranking in zip(queries, rankings) for i in ranking[:top_n]]
         scores = get_reranker(self.rerank_model).predict(pairs, batch_size=64, show_progress_bar=False) if pairs else []
+        release_gpu_memory()
         out, start = [], 0
         for ranking in rankings:
             head = ranking[:top_n]
