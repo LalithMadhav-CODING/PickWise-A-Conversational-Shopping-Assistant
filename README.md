@@ -148,6 +148,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 PICKWISE_QUICK_RUN=1 .venv/bin/python run_notebook.py  # live log: tail -f notebook_run.log
 ```
 
+**On a machine with 16 GB of RAM or less**, start Ollama with `LLAMA_ARG_CACHE_RAM=0` (e.g. `LLAMA_ARG_CACHE_RAM=0 ollama serve`). Its llama.cpp runner otherwise keeps a prompt cache that grows to ~8 GB of RAM. The Colab cell does this already.
+
 **Recorded LLM outputs.** The LLM batch work would take ~10 h on a T4: 1,000 need analyses, the reasoning check, the smoke tests, the end-to-end runs and the judge. Its outputs are in `recorded/` and are replayed, so every reported number comes out the same. Everything else runs live: the catalogue, embeddings, searches, metrics, demo, memory test and cart attacks. `PICKWISE_RECOMPUTE=1` recomputes everything (about 5 h on our GPU). Without `PICKWISE_QUICK_RUN` the notebook uses all 800 test requests and recomputes the model comparison: ~35 min on our GPU.
 
 ### Settings
