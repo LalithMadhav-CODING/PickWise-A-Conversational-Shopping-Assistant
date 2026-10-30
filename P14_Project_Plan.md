@@ -236,11 +236,11 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 - **Builds on** · Module 4 · Agentic_app (Streamlit reference; Gradio used, see 8.2)
 - **Done when** · at least one stretch goal working ✅ (BLaIR, web app)
 
-### Phase 9 — Run on free Colab T4 / laptop CPU  ✅ (branch `phase-9-colab`; `DECISION_LOG.md` 9.1–9.10) — one real Colab run left for the team
+### Phase 9 — Run on free Colab T4 / laptop CPU  ✅ (branch `phase-9-colab`; `DECISION_LOG.md` 9.1–9.11) — one real Colab run left for the team
 - [x] `QUICK_RUN` also skips the model comparison (recorded table) and reuses the recorded end-to-end answers
 - [x] LLM outputs recorded in `recorded/` (3.3 MB) and replayed; `PICKWISE_RECOMPUTE=1` recomputes everything
 - [x] Colab setup cell: clone, install + start Ollama, pull qwen3:4b (T4 memory: ~4 GB LLM + ~3 GB retrieval models, well under 15 GB)
-- [x] Fixes from the team's Colab runs: GPU memory (9.8), system RAM (9.9), MCP server start-up (9.10: port opens at once, models load in the background, start-up errors show the server log)
+- [x] Fixes from the team's Colab runs: GPU memory (9.8), system RAM (9.9), MCP server start-up (9.10: port opens at once, models load in the background, start-up errors show the server log), Ollama start-up (9.11: survives a session restart, logged)
 - [x] CPU-only quick run verified: 2 h 29 min from an empty data folder (24-core desktop CPU), no errors; `PICKWISE_RETRIEVAL=dense` for a fast live system on CPU
 - [x] Fresh clone + empty data folder, quick mode: whole notebook runs, 14.5 min cold on our GPU; Colab T4 estimated ≈ 40 min
 - [ ] **A real Colab T4 run (team; no Colab access here)**, after merging the branches into `main`
@@ -318,7 +318,7 @@ Phase branches are not merged into `main` yet (the team's call).
 | Comparator claims what the product text doesn't say ("no latex") | Verbatim-quote check on every pick; unsupported avoid-claims cut, with an honest "the description doesn't mention X" note (6.5); measured by the Phase 7 judge |
 | Preference extractor (4B) puts items in the wrong field or invents them | Cue gating, grounding in the shopper's words, polarity and brand decided by code (5.2–5.4); avoided items filtered deterministically (6.6). Still misses double negatives (5.16) → Limitations |
 | End-to-end evaluation takes hours (ReAct ≈ 2.6 h, judge ≈ 1.7 h on 200 requests) | One 200-request subset, background runs, every answer cached in `data/runs/` |
-| A fresh notebook run takes hours, and Colab T4 / CPU is untested (a brief constraint) | Phase 9: `QUICK_RUN` shrinks the dev experiments, recorded comparisons loaded, timed Colab run. Team runs so far hit GPU memory, RAM and MCP start-up problems, all fixed (9.8–9.10), each still to confirm on Colab |
+| A fresh notebook run takes hours, and Colab T4 / CPU is untested (a brief constraint) | Phase 9: `QUICK_RUN` shrinks the dev experiments, recorded comparisons loaded, timed Colab run. Team runs so far hit GPU memory, RAM and MCP and Ollama start-up problems, all fixed (9.8–9.11), each still to confirm on Colab |
 | A 4B judge grading a 4B model may be lenient | 30 blind human checks by the team; judge–human agreement reported |
 | The catalogue has no prices, so a budget can't be checked | Budget is remembered and the reply says it can't be checked; in Limitations |
 | `ori_review` leaks into the index | Never read it into the index; assert in code |
