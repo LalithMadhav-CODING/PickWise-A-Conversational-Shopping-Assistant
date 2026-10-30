@@ -5,6 +5,7 @@ Each tool returns JSON text, which travels unchanged over MCP. search_products a
 search itself took, so the MCP-vs-local comparison can separate retrieval time from transport time.
 """
 import json
+import threading
 import time
 from functools import lru_cache
 
@@ -41,10 +42,17 @@ def search_products(query: str, category: str = "", k: int = config.N_CANDIDATES
     k: how many products to return (default 10).
     Returns JSON: {"products": [{item_id, title, category, text}], "seconds": search time}.
     """
-    t = time.perf_counter()
-    rows = get_retriever().search(query, category=category or None, k=int(k), method=config.RETRIEVAL_METHOD)
+    with _search_lock:
+        t = time.perf_counter()
+        rows = get_retriever().search(query, category=category or None, k=int(k), method=config.RETRIEVAL_METHOD)
+        seconds = time.perf_counter() - t
     products = [product_card(row) for _, row in rows.iterrows()]
-    return json.dumps({"products": products, "seconds": round(time.perf_counter() - t, 4)})
+    return json.dumps({"products": products, "seconds": round(seconds, 4)})
+
+
+# Tool calls run on worker threads (MCP and LangChain alike). One search at a time: the first calls, or a call that
+# arrives during the MCP server's background warm-up, wait for the models instead of loading a second copy on the GPU.
+_search_lock = threading.Lock()
 
 
 def get_product(item_id: str) -> str:

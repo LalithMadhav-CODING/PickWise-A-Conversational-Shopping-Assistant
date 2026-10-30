@@ -11,10 +11,12 @@
 | add_to_cart     | Action (Phase 5)       | HIGH | local only, after the shopper approves   |
 """
 import atexit
-import socket
+import json
 import subprocess
 import sys
 import time
+from urllib.error import URLError
+from urllib.request import ProxyHandler, Request, build_opener
 
 from langchain_core.tools import StructuredTool
 
@@ -28,29 +30,51 @@ def local_tools() -> dict:
 
 
 def server_is_up() -> bool:
-    with socket.socket() as s:
-        s.settimeout(0.5)
-        return s.connect_ex((config.MCP_HOST, config.MCP_PORT)) == 0
+    """True when OUR server answers (its /health route), not just any program that holds the port."""
+    url = f"http://{config.MCP_HOST}:{config.MCP_PORT}/health"
+    try:
+        with build_opener(ProxyHandler({})).open(Request(url), timeout=2) as response:
+            return json.load(response).get("service") == "pickwise-catalogue"
+    except (OSError, ValueError, URLError):
+        return False
 
 
-def ensure_server(timeout: float = 300) -> str:
-    """Start the MCP server in the background unless something already listens on its port."""
+def _startup_error(message: str) -> RuntimeError:
+    """The error shows the end of the server's log, so a failed start explains itself in the notebook (on Colab
+    the log file is out of sight)."""
+    path = config.ROOT / "mcp_server.log"
+    tail = path.read_text(errors="replace")[-4000:] if path.exists() else "(no server log)"
+    if "address already in use" in tail.lower():
+        message += (f"\nPort {config.MCP_PORT} is taken, probably by a server left over from an earlier session: "
+                    "stop it (`!pkill -f Pickwise.mcp_server`) or set PICKWISE_MCP_PORT, then run this cell again.")
+    return RuntimeError(f"{message}\nServer log ({path}), last lines:\n{tail}")
+
+
+def ensure_server(timeout: float = 120) -> str:
+    """Start the MCP server in the background unless it already runs. The server opens its port within seconds and
+    loads the index and models after that (mcp_server.py), so this only waits for the port."""
     global _server_process
     if server_is_up():
         return "already running"
     if _server_process is None or _server_process.poll() is not None:
-        log = open(config.ROOT / "mcp_server.log", "w")
-        _server_process = subprocess.Popen([sys.executable, "-m", "Pickwise.mcp_server"],
-                                           stdout=log, stderr=subprocess.STDOUT, cwd=config.ROOT)
+        with open(config.ROOT / "mcp_server.log", "w") as log:
+            _server_process = subprocess.Popen([sys.executable, "-u", "-m", "Pickwise.mcp_server"],
+                                               stdout=log, stderr=subprocess.STDOUT, cwd=config.ROOT)
         atexit.register(_server_process.terminate)        # a server we started stops when we stop
-    deadline = time.time() + timeout                       # the first start loads the index and models
-    while time.time() < deadline:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _server_process.poll() is not None:
+            raise _startup_error("The MCP server exited during start-up.")
         if server_is_up():
             return "started"
-        if _server_process.poll() is not None:
-            raise RuntimeError("The MCP server exited during start-up. See mcp_server.log.")
         time.sleep(0.5)
-    raise RuntimeError(f"The MCP server did not open {config.MCP_URL} within {timeout:.0f}s. See mcp_server.log.")
+    _server_process.terminate()
+    try:
+        _server_process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        _server_process.kill()
+        _server_process.wait(timeout=5)
+    raise _startup_error(f"The MCP server did not become healthy at {config.MCP_URL} within {timeout:.0f}s.")
 
 
 async def mcp_tools() -> dict:

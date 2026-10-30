@@ -61,7 +61,6 @@ def get_embedder(name: str = config.EMBED_MODEL):
     return model
 
 
-@lru_cache(maxsize=2)
 def release_gpu_memory() -> None:
     """Hand PyTorch's cached-but-unused GPU memory back after a big batch. Ollama and the MCP server share the
     GPU with this process: on a 15 GB Colab T4 the cache held after embedding the catalogue (~2 GB) left no
@@ -71,6 +70,7 @@ def release_gpu_memory() -> None:
         torch.cuda.empty_cache()
 
 
+@lru_cache(maxsize=2)
 def get_reranker(name: str = config.RERANK_MODEL):
     import torch
     from sentence_transformers import CrossEncoder
