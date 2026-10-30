@@ -70,12 +70,25 @@ def release_gpu_memory() -> None:
         torch.cuda.empty_cache()
 
 
+@lru_cache(maxsize=1)
+def gpu_lacks_bfloat16() -> bool:
+    """A T4 (compute capability 7.5) has no bfloat16 arithmetic. The Qwen3 re-ranker's own bfloat16 then runs slowly and
+    without memory-efficient attention: ~4 GB per batch of 64 instead of ~0.2 GB in float16, batch 16 (DECISION_LOG 9.13)."""
+    import torch
+    return torch.cuda.is_available() and torch.cuda.get_device_capability()[0] < 8
+
+
 @lru_cache(maxsize=2)
 def get_reranker(name: str = config.RERANK_MODEL):
     import torch
     from sentence_transformers import CrossEncoder
-    # bfloat16 weights run slowly on many CPUs; float32 there, the checkpoint's dtype on GPU
-    kwargs = {} if torch.cuda.is_available() else {"model_kwargs": {"dtype": torch.float32}}
+    # bfloat16 weights run slowly on many CPUs: float32 there. On a GPU the checkpoint's dtype, or float16 on a T4
+    if not torch.cuda.is_available():
+        kwargs = {"model_kwargs": {"dtype": torch.float32}}
+    elif gpu_lacks_bfloat16():
+        kwargs = {"model_kwargs": {"dtype": torch.float16}}
+    else:
+        kwargs = {}
     return CrossEncoder(name, max_length=512, **kwargs)
 
 
@@ -224,7 +237,8 @@ class Retriever:
         top_n = top_n or self.rerank_top_n
         texts = self.catalogue["text"].str.slice(0, 2000).to_numpy()     # the model truncates at 512 tokens anyway
         pairs = [(q, texts[i]) for q, ranking in zip(queries, rankings) for i in ranking[:top_n]]
-        scores = get_reranker(self.rerank_model).predict(pairs, batch_size=64, show_progress_bar=False) if pairs else []
+        batch = 16 if gpu_lacks_bfloat16() else 64
+        scores = get_reranker(self.rerank_model).predict(pairs, batch_size=batch, show_progress_bar=False) if pairs else []
         release_gpu_memory()
         out, start = [], 0
         for ranking in rankings:
