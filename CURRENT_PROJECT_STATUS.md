@@ -312,12 +312,13 @@ Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (7.1–7.8), **written and p
 
 ## Phase 9 — Colab T4 / CPU ✅ (branch `phase-9-colab`)
 
-Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (9.1–9.7).
+Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (9.1–9.10).
 
 - [x] Recorded LLM outputs (`recorded/`, 3.3 MB) replayed at the start; `PICKWISE_RECOMPUTE=1` recomputes everything.
 - [x] Quick mode: recorded model-comparison table, the first 100 of the recorded end-to-end answers.
 - [x] Colab setup cell (clone, Ollama, qwen3:4b); requirements trimmed to what the code imports.
 - [x] Fresh clone, empty data folder, quick mode: **14.5 min** cold on our GPU (9.4 warm); **CPU-only 2 h 29 min** (24-core desktop); no errors in either.
+- [x] Colab fixes from the team's runs: GPU memory (9.8), system RAM (9.9), MCP server start-up (9.10: opens its port at once, loads the models in the background, start-up errors show the server log; re-ranker no longer reloaded on every search).
 - [ ] **Team:** time one real Colab T4 run (estimated ≈ 40 min), after merging the branches into `main` and making the repo reachable (public or a token).
 
 ## Findings / notes
