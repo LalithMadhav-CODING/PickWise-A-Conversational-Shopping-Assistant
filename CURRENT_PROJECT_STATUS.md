@@ -17,7 +17,7 @@ Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_P
 | 6 — Demo Cell | ✅ done 2026-10-27 (branch `phase-6-demo`) |
 | 7 — Evaluation | ✅ done 2026-10-27 (branch `phase-7-evaluation`): target pre-registered (`b1a7130`) before the runs |
 | 8 — Stretch Goals | 🟡 web app ✅ 2026-10-27 (branch `phase-8-app`), BLaIR ✅, LoRA ⚪ |
-| 9 — Colab T4 / CPU | ✅ 2026-10-27 (branch `phase-9-colab`): fresh clone runs on GPU (14.5 min) and CPU-only (2 h 29 min); one Colab run by the team |
+| 9 — Colab T4 / CPU | ✅ 2026-10-27 (branch `phase-9-colab`): fresh clone runs on GPU (14.5 min) and CPU-only (2 h 29 min); **a quick run completed on a free Colab T4** (2026-10-30) |
 
 **Milestone M1 (Data + Retrieval): ✅** catalogue built; 4 retrieval variants scored. **M2 (Need analyst): ✅** rewriting vs raw measured on test; reasoning mode confirmed on dev. **Stretch: BLaIR embedder ✅** (adopted, with Qwen3-Reranker).
 
@@ -25,7 +25,10 @@ Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_P
 
 | File | What it is |
 |---|---|
-| `P14_Shopping_Assistant.ipynb` | The deliverable notebook — §1 Problem, §2 Setup, §3 Data filled and executed; §4–10 placeholders |
+| `P14_Shopping_Assistant.ipynb` | The deliverable notebook: all 10 sections, executed (full run) |
+| `P14_Shopping_Assistant_Jupyter.ipynb` | The same, restructured for evaluation, for a local Jupyter kernel (full run by default; `DECISION_LOG.md` 9.12) |
+| `P14_Shopping_Assistant_Colab.ipynb` | The same for a free Colab T4 (quick run by default) |
+| `P14_Shopping_Assistant_Colab_Final.ipynb` | A completed quick run on a Colab T4, with its outputs (2026-10-30) |
 | `Pickwise/config.py` | All settings (model, data sizes, seed, QUICK_RUN, RISKY_TOOLS) |
 | `Pickwise/data.py` | `load_queries`, `build_catalogue` (cached), `split_queries`, `check_no_leakage` |
 | `Pickwise/llm.py` | `get_llm(model, reasoning)`, `reasoning_trace(msg)` |
@@ -312,14 +315,16 @@ Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (7.1–7.8), **written and p
 
 ## Phase 9 — Colab T4 / CPU ✅ (branch `phase-9-colab`)
 
-Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (9.1–9.11).
+Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (9.1–9.13).
 
 - [x] Recorded LLM outputs (`recorded/`, 3.3 MB) replayed at the start; `PICKWISE_RECOMPUTE=1` recomputes everything.
 - [x] Quick mode: recorded model-comparison table, the first 100 of the recorded end-to-end answers.
 - [x] Colab setup cell (clone, Ollama, qwen3:4b); requirements trimmed to what the code imports.
 - [x] Fresh clone, empty data folder, quick mode: **14.5 min** cold on our GPU (9.4 warm); **CPU-only 2 h 29 min** (24-core desktop); no errors in either.
 - [x] Colab fixes from the team's runs: GPU memory (9.8), system RAM (9.9), MCP server start-up (9.10: opens its port at once, loads the models in the background, start-up errors show the server log; re-ranker no longer reloaded on every search), Ollama start-up (9.11: own session, so a session restart no longer stops it; logged; restarted by the check cell).
-- [ ] **Team:** time one real Colab T4 run (estimated ≈ 40 min), after merging the branches into `main` and making the repo reachable (public or a token).
+- [x] Clean notebooks for evaluation (9.12): `P14_Shopping_Assistant_Jupyter.ipynb` (local) and `P14_Shopping_Assistant_Colab.ipynb` (Colab); the experiment code is unchanged, the text follows the course template.
+- [x] **A real Colab T4 run completed** (team, 2026-10-30, quick mode, branch `phase-9-colab`): `P14_Shopping_Assistant_Colab_Final.ipynb`. It ran out of GPU memory in §7 and was slow in the re-ranking cells; the team finished it with a pasted fix, now in the code (9.13: float16 re-ranker in batches of 16 on GPUs without bfloat16). Time not recorded.
+- [ ] **Team:** time one Colab run with 9.13 in the code (no extra cell needed).
 
 ## Findings / notes
 
@@ -343,3 +348,4 @@ See *Plan Review — Open Issues* in `P14_Project_Plan.md`. Resolved so far: #2 
 - 2026-10-27 — **Phase 6 verification run** found 3 more bugs, all fixed (6.8–6.10): the avoid filter failed open, the LLM router sent a new request to compare, the clause stripper broke grammar. Demo belt request reworded (6.11). `P14_Project_Plan.md` brought fully up to date (diagram, success target, Phase 7 plan, Phase 9, milestones, risks, checklist).
 - 2026-10-27 — **Phase 6 pushed** (`c1372fe`). **Phase 8 web app built** (`app.py`, branch `phase-8-app`): 16/16 end-to-end checks.
 - 2026-10-27 — **Phase 7 pushed** (`20c2a2d`): results table, error analysis, limitations, talk outline. **Phase 9**: recorded LLM outputs replayed; fresh-clone runs verified on GPU (14.5 min) and CPU-only (2 h 29 min).
+- 2026-10-30 — **Colab fixes** for the team's runs: MCP server start-up (9.10), Ollama start-up (9.11). **Two clean notebooks for evaluation** (9.12). **A quick run completed on a free Colab T4**; its GPU-memory failure in §7 led to the T4 re-ranker fix (9.13). The repository is public now.

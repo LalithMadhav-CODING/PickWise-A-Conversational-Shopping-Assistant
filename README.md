@@ -130,7 +130,7 @@ Baselines: BM25 and dense retrieval on the raw request, and a single ReAct agent
 | 6 — Demo | ✅ (branch `phase-6-demo`) |
 | 7 — Evaluation | ✅ (branch `phase-7-evaluation`) |
 | 8 — Stretch: web app ✅ (branch `phase-8-app`), BLaIR embedder ✅, LoRA need analyst ⚪ | 🟡 |
-| 9 — Colab T4 / CPU | ✅ (branch `phase-9-colab`): fresh clone verified on GPU and CPU-only; Colab timing to confirm |
+| 9 — Colab T4 / CPU | ✅ (branch `phase-9-colab`): fresh clone verified on GPU and CPU-only; a quick run completed on a free Colab T4 (2026-10-30; time not recorded) |
 
 Detailed progress, decisions and numbers: [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md) · Full plan: [`P14_Project_Plan.md`](P14_Project_Plan.md)
 
@@ -138,8 +138,8 @@ Detailed progress, decisions and numbers: [`CURRENT_PROJECT_STATUS.md`](CURRENT_
 
 | Where | How | Time (quick run) |
 |---|---|---|
-| **Free Colab T4** | Runtime → T4 GPU; upload `P14_Shopping_Assistant.ipynb`; first cell `%env PICKWISE_QUICK_RUN=1` (and `%env PICKWISE_REPO=https://<token>@github.com/…` while this repo is private); *Run all*. The notebook clones the code, installs Ollama and pulls qwen3:4b itself. | ≈ 40 min (estimated) |
-| Laptop / workstation (GPU) | see below | 14.5 min cold, 9.4 min warm (RTX 4000 Ada) |
+| **Free Colab T4** | Upload `P14_Shopping_Assistant_Colab.ipynb` (*File → Upload notebook*), Runtime → T4 GPU, *Run all*. It clones this repository (branch `phase-9-colab`), installs the packages and Ollama, and pulls qwen3:4b itself. A completed quick run with all its outputs: `P14_Shopping_Assistant_Colab_Final.ipynb`. | ≈ 40 min (estimated) |
+| Laptop / workstation (GPU) | open `P14_Shopping_Assistant_Jupyter.ipynb` from the project folder on the project's kernel, or see below | 14.5 min cold, 9.4 min warm (RTX 4000 Ada) |
 | Laptop CPU only | see below; `PICKWISE_RETRIEVAL=dense` keeps searches fast | 2 h 29 min cold on a 24-core desktop CPU (mostly the Qwen3 re-ranker); longer on a typical laptop |
 
 ```bash
@@ -170,7 +170,10 @@ All settings live in [`Pickwise/config.py`](Pickwise/config.py). Overrides:
 ## Repository layout
 
 ```
-P14_Shopping_Assistant.ipynb   the deliverable notebook (problem → data → system → evaluation → demo)
+P14_Shopping_Assistant.ipynb   the deliverable notebook (problem → data → system → evaluation → demo), executed
+P14_Shopping_Assistant_Jupyter.ipynb      the same, restructured for evaluation: a local Jupyter kernel (full run)
+P14_Shopping_Assistant_Colab.ipynb        the same for a free Colab T4 (quick run)
+P14_Shopping_Assistant_Colab_Final.ipynb  a completed quick run on a Colab T4, with its outputs
 Pickwise/                      reusable code imported by the notebook, MCP server and app
   config.py                    all settings
   data.py                      queries, cached catalogue, dev/test split, leakage checks

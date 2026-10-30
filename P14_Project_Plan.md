@@ -8,8 +8,8 @@
 > **Dataset** · McAuley-Lab/Amazon-C4 (Hugging Face, public)
 > **Model** · qwen3:4b via Ollama (≤4B params, no paid APIs)
 
-> [!abstract] Where we are · updated 2026-10-27 (evening)
-> Phases 0–7 done (✅ below) · Phase 8 web app ✅ · **Phase 9: run on free Colab T4 / laptop CPU — next** · talk slides + outline ready (`TALK_OUTLINE.md`). Results vs the pre-registered target: Hit@3 0.380 (missed narrowly) · vs ReAct not significant · faithfulness 59% (missed) · approvals 100% (met). Live progress: `CURRENT_PROJECT_STATUS.md` · every choice made without the team: `DECISION_LOG.md`.
+> [!abstract] Where we are · updated 2026-10-30
+> Phases 0–7 done (✅ below) · Phase 8 web app ✅ · **Phase 9 ✅: a quick run completed on a free Colab T4** (2026-10-30, with the T4 re-ranker fix 9.13) · notebooks for evaluation: `P14_Shopping_Assistant_Jupyter.ipynb` (local) and `P14_Shopping_Assistant_Colab.ipynb` (completed run: `…_Colab_Final.ipynb`) · talk slides + outline ready (`TALK_OUTLINE.md`) · left for the team: merge the branches into `main`, the 30 human labels, the team table, time a Colab run, rehearse. Results vs the pre-registered target: Hit@3 0.380 (missed narrowly) · vs ReAct not significant · faithfulness 59% (missed) · approvals 100% (met). Live progress: `CURRENT_PROJECT_STATUS.md` · every choice made without the team: `DECISION_LOG.md`.
 
 ---
 
@@ -236,15 +236,18 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 - **Builds on** · Module 4 · Agentic_app (Streamlit reference; Gradio used, see 8.2)
 - **Done when** · at least one stretch goal working ✅ (BLaIR, web app)
 
-### Phase 9 — Run on free Colab T4 / laptop CPU  ✅ (branch `phase-9-colab`; `DECISION_LOG.md` 9.1–9.11) — one real Colab run left for the team
+### Phase 9 — Run on free Colab T4 / laptop CPU  ✅ (branch `phase-9-colab`; `DECISION_LOG.md` 9.1–9.13) — a quick Colab T4 run completed 2026-10-30
 - [x] `QUICK_RUN` also skips the model comparison (recorded table) and reuses the recorded end-to-end answers
 - [x] LLM outputs recorded in `recorded/` (3.3 MB) and replayed; `PICKWISE_RECOMPUTE=1` recomputes everything
-- [x] Colab setup cell: clone, install + start Ollama, pull qwen3:4b (T4 memory: ~4 GB LLM + ~3 GB retrieval models, well under 15 GB)
+- [x] Colab setup cell: clone, install + start Ollama, pull qwen3:4b (T4 memory settings: 9.8, 9.9, 9.13)
 - [x] Fixes from the team's Colab runs: GPU memory (9.8), system RAM (9.9), MCP server start-up (9.10: port opens at once, models load in the background, start-up errors show the server log), Ollama start-up (9.11: survives a session restart, logged)
 - [x] CPU-only quick run verified: 2 h 29 min from an empty data folder (24-core desktop CPU), no errors; `PICKWISE_RETRIEVAL=dense` for a fast live system on CPU
 - [x] Fresh clone + empty data folder, quick mode: whole notebook runs, 14.5 min cold on our GPU; Colab T4 estimated ≈ 40 min
-- [ ] **A real Colab T4 run (team; no Colab access here)**, after merging the branches into `main`
-- **Done when** · a fresh Colab T4 runs the notebook end to end in `QUICK_RUN`, and the run time is stated
+- [x] Clean notebooks for evaluation (9.12): `P14_Shopping_Assistant_Jupyter.ipynb` (local, full run) and `P14_Shopping_Assistant_Colab.ipynb` (Colab, quick run)
+- [x] **A real Colab T4 run** (team, 2026-10-30, quick mode, branch `phase-9-colab`): completed; outputs in `P14_Shopping_Assistant_Colab_Final.ipynb`
+- [x] T4 fix from that run (9.13): it ran out of GPU memory in §7 and was slow, because a T4 cannot compute the re-ranker's bfloat16 → float16 in batches of 16 on such GPUs; every other machine unchanged
+- [ ] Time one Colab run with 9.13 in the code (team)
+- **Done when** · a fresh Colab T4 runs the notebook end to end in `QUICK_RUN`, and the run time is stated · ✅ 2026-10-30 (run time still to state)
 
 ---
 
@@ -303,7 +306,7 @@ Title + Team + Contributions
 | M4 — Memory + approval | multi-turn memory; 100% approval gate | ✅ 2026-10-27 (`phase-5-memory-approval`) |
 | M5 — Evaluation | results table + ≥ 10 error cases | ✅ 2026-10-27 (`phase-7-evaluation`) |
 | M6 — Demo + talk | clean demo; 10-min talk rehearsed | demo ✅ · slides + outline ✅ 2026-10-27 (`TALK_OUTLINE.md`) · rehearsal ⏳ (team) |
-| M7 — Colab T4 / CPU | fresh Colab run, timed | ⏳ after M5 (Phase 9) |
+| M7 — Colab T4 / CPU | fresh Colab run, timed | ✅ CPU-only 2026-10-27 · Colab T4 quick run completed 2026-10-30 (time not recorded) |
 
 Phase branches are not merged into `main` yet (the team's call).
 
@@ -318,7 +321,7 @@ Phase branches are not merged into `main` yet (the team's call).
 | Comparator claims what the product text doesn't say ("no latex") | Verbatim-quote check on every pick; unsupported avoid-claims cut, with an honest "the description doesn't mention X" note (6.5); measured by the Phase 7 judge |
 | Preference extractor (4B) puts items in the wrong field or invents them | Cue gating, grounding in the shopper's words, polarity and brand decided by code (5.2–5.4); avoided items filtered deterministically (6.6). Still misses double negatives (5.16) → Limitations |
 | End-to-end evaluation takes hours (ReAct ≈ 2.6 h, judge ≈ 1.7 h on 200 requests) | One 200-request subset, background runs, every answer cached in `data/runs/` |
-| A fresh notebook run takes hours, and Colab T4 / CPU is untested (a brief constraint) | Phase 9: `QUICK_RUN` shrinks the dev experiments, recorded comparisons loaded, timed Colab run. Team runs so far hit GPU memory, RAM and MCP and Ollama start-up problems, all fixed (9.8–9.11), each still to confirm on Colab |
+| A fresh notebook run takes hours, and Colab T4 / CPU is untested (a brief constraint) | Phase 9: `QUICK_RUN` shrinks the dev experiments, recorded comparisons loaded, timed Colab run. Team runs so far hit GPU memory, RAM and MCP and Ollama start-up problems, all fixed (9.8–9.11). The first complete Colab run (2026-10-30) then ran out of GPU memory in §7: fixed by 9.13 (float16 re-ranker on a T4) |
 | A 4B judge grading a 4B model may be lenient | 30 blind human checks by the team; judge–human agreement reported |
 | The catalogue has no prices, so a budget can't be checked | Budget is remembered and the reply says it can't be checked; in Limitations |
 | `ori_review` leaks into the index | Never read it into the index; assert in code |
@@ -353,7 +356,7 @@ Gaps found when checking this plan against the brief (`Project/P14_Shopping_Assi
 | 13 | **Faithfulness judging** — 30 human checks need an owner; qwen3:4b judging its own output may be biased | Judge built (`Pickwise/judge.py`); Phase 7 writes a blind 30-row sheet. **Owner for the human labels: team, TBD**; bias goes in Limitations | 7 |
 | 14 | **Catalogue build is slow** — streaming the 640 MB jsonl isn't reduced by QUICK_RUN | ✅ **Resolved 2026-10-26** — `data/catalogue.parquet`; re-runs load in < 1 s | 1 |
 | 15 | **Expectations** — Recall@10 on a ~30k-item catalogue will be well below 1.0 | Frame expected ranges in the talk so a modest Hit@3 isn't read as failure | talk |
-| 16 | **"Runs on free Colab T4 or laptop CPU" unverified** (audit 2026-10-27) — a fresh first run takes hours (reasoning check ≈ 100 min, model comparison, smoke tests) | Phase 9, after every phase is verified (agreed with the user) | 9 |
+| 16 | **"Runs on free Colab T4 or laptop CPU" unverified** (audit 2026-10-27) — a fresh first run takes hours (reasoning check ≈ 100 min, model comparison, smoke tests) | ✅ **Resolved 2026-10-30** — fresh clone verified on GPU and CPU-only; a quick run completed on a free Colab T4 (9.10–9.13) | 9 |
 | 17 | **Re-ranker differs from the brief's example** — Qwen3-Reranker-0.6B is an LLM-based re-ranker, not ms-marco MiniLM | Justified on dev (DECISION_LOG R.1); the lab re-ranker rows stay in every table; **say it in the talk** | talk |
 
 ---
@@ -368,8 +371,8 @@ Gaps found when checking this plan against the brief (`Project/P14_Shopping_Assi
 - [x] ≥ 10 failure cases in error analysis (all 124 misses categorised; annotated examples per category)
 - [x] `add_to_cart` 100% through approval (Phase 5: 100% approval share, adversarial 8/8 paused; re-checked in Phase 7)
 - [x] ≤ 4B params, no paid APIs (qwen3:4b · BLaIR 0.1B · Qwen3-Reranker 0.6B · all local)
-- [x] Each part cites the lab it builds on ("Builds on" lines in §2–§5; §8 cites Module 4 Section E); §6–§7 to add in Phase 7
-- [x] Runs on free Colab T4 / laptop CPU: fresh clone verified on GPU (14.5 min) and CPU-only (2 h 29 min); Colab T4 ≈ 40 min estimated, to confirm
+- [x] Each part cites the lab it builds on ("Builds on" lines in §2–§5; §8 cites Module 4 Section E; §6 cites Module 3 and the brief)
+- [x] Runs on free Colab T4 / laptop CPU: fresh clone verified on GPU (14.5 min) and CPU-only (2 h 29 min); a quick run completed on a free Colab T4 (2026-10-30; time not recorded)
 
 ---
 
