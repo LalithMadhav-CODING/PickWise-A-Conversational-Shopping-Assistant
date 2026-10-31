@@ -138,7 +138,7 @@ Detailed progress, decisions and numbers: [`CURRENT_PROJECT_STATUS.md`](CURRENT_
 
 | Where | How | Time (quick run) |
 |---|---|---|
-| **Free Colab T4** | Upload `P14_Shopping_Assistant_Colab.ipynb` (*File → Upload notebook*), Runtime → T4 GPU, *Run all*. It clones this repository (branch `phase-9-colab`), installs the packages and Ollama, and pulls qwen3:4b itself. A completed quick run with all its outputs: `P14_Shopping_Assistant_Colab_Final.ipynb`. | ≈ 40 min (estimated) |
+| **Free Colab T4** | Upload `P14_Shopping_Assistant_Colab.ipynb` (*File → Upload notebook*), Runtime → T4 GPU, *Run all*. It clones this repository (`main`), installs the packages and Ollama, and pulls qwen3:4b itself. `P14_Shopping_Assistant_Colab_Final.ipynb` is the same notebook, the one we submit after a Colab run. | ≈ 40 min (estimated) |
 | Laptop / workstation (GPU) | open `P14_Shopping_Assistant_Jupyter.ipynb` from the project folder on the project's kernel, or see below | 14.5 min cold, 9.4 min warm (RTX 4000 Ada) |
 | Laptop CPU only | see below; `PICKWISE_RETRIEVAL=dense` keeps searches fast | 2 h 29 min cold on a 24-core desktop CPU (mostly the Qwen3 re-ranker); longer on a typical laptop |
 
@@ -173,7 +173,7 @@ All settings live in [`Pickwise/config.py`](Pickwise/config.py). Overrides:
 P14_Shopping_Assistant.ipynb   the deliverable notebook (problem → data → system → evaluation → demo), executed
 P14_Shopping_Assistant_Jupyter.ipynb      the same, restructured for evaluation: a local Jupyter kernel (full run)
 P14_Shopping_Assistant_Colab.ipynb        the same for a free Colab T4 (quick run)
-P14_Shopping_Assistant_Colab_Final.ipynb  a completed quick run on a Colab T4, with its outputs
+P14_Shopping_Assistant_Colab_Final.ipynb  the notebook we submit: the Colab one, run on a free T4
 Pickwise/                      reusable code imported by the notebook, MCP server and app
   config.py                    all settings
   data.py                      queries, cached catalogue, dev/test split, leakage checks

@@ -9,7 +9,7 @@
 > **Model** · qwen3:4b via Ollama (≤4B params, no paid APIs)
 
 > [!abstract] Where we are · updated 2026-10-31
-> Phases 0–7 done (✅ below) · Phase 8 web app ✅ · **Phase 9 ✅: a quick run completed on a free Colab T4** (2026-10-30, with the T4 re-ranker fix 9.13) · notebooks for evaluation: `P14_Shopping_Assistant_Jupyter.ipynb` (local) and `P14_Shopping_Assistant_Colab.ipynb` (completed run: `…_Colab_Final.ipynb`) · talk slides + outline ready (`TALK_OUTLINE.md`) · **checked against the brief and all phases merged into `main`** (2026-10-31, 9.14–9.15) · **30 human labels done** (2026-10-31: the judge agrees with them on 43%, κ −0.15, 9.16) · left for the team: the contributions column of the team table, time a Colab run, rehearse. Results vs the pre-registered target: Hit@3 0.380 (missed narrowly) · vs ReAct not significant · faithfulness 59% (missed; not confirmed by the human check) · approvals 100% (met). Live progress: `CURRENT_PROJECT_STATUS.md` · every choice made without the team: `DECISION_LOG.md`.
+> Phases 0–7 done (✅ below) · Phase 8 web app ✅ · **Phase 9 ✅: a quick run completed on a free Colab T4** (2026-10-30, with the T4 re-ranker fix 9.13) · notebooks for evaluation: `P14_Shopping_Assistant_Jupyter.ipynb` (local) and `P14_Shopping_Assistant_Colab.ipynb` (to submit after a Colab run: `…_Colab_Final.ipynb`, 9.17) · talk slides + outline ready (`TALK_OUTLINE.md`) · **checked against the brief and all phases merged into `main`** (2026-10-31, 9.14–9.15) · **30 human labels done** (2026-10-31: the judge agrees with them on 43%, κ −0.15, 9.16) · left for the team: the contributions column of the team table, time a Colab run, rehearse. Results vs the pre-registered target: Hit@3 0.380 (missed narrowly) · vs ReAct not significant · faithfulness 59% (missed; not confirmed by the human check) · approvals 100% (met). Live progress: `CURRENT_PROJECT_STATUS.md` · every choice made without the team: `DECISION_LOG.md`.
 
 ---
 
@@ -244,7 +244,7 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 - [x] CPU-only quick run verified: 2 h 29 min from an empty data folder (24-core desktop CPU), no errors; `PICKWISE_RETRIEVAL=dense` for a fast live system on CPU
 - [x] Fresh clone + empty data folder, quick mode: whole notebook runs, 14.5 min cold on our GPU; Colab T4 estimated ≈ 40 min
 - [x] Clean notebooks for evaluation (9.12): `P14_Shopping_Assistant_Jupyter.ipynb` (local, full run) and `P14_Shopping_Assistant_Colab.ipynb` (Colab, quick run)
-- [x] **A real Colab T4 run** (team, 2026-10-30, quick mode, branch `phase-9-colab`): completed; outputs in `P14_Shopping_Assistant_Colab_Final.ipynb`
+- [x] **A real Colab T4 run** (team, 2026-10-30, quick mode, branch `phase-9-colab`): completed (its record: `git show f66e728:P14_Shopping_Assistant_Colab_Final.ipynb`); the file is now the submission notebook, rebuilt to run cleanly (9.17)
 - [x] T4 fix from that run (9.13): it ran out of GPU memory in §7 and was slow, because a T4 cannot compute the re-ranker's bfloat16 → float16 in batches of 16 on such GPUs; every other machine unchanged
 - [ ] Time one Colab run with 9.13 in the code (team)
 - **Done when** · a fresh Colab T4 runs the notebook end to end in `QUICK_RUN`, and the run time is stated · ✅ 2026-10-30 (run time still to state)

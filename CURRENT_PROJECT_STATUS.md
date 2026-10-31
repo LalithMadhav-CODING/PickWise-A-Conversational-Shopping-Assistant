@@ -30,7 +30,7 @@ Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_P
 | `P14_Shopping_Assistant.ipynb` | The deliverable notebook: all 10 sections, executed (full run) |
 | `P14_Shopping_Assistant_Jupyter.ipynb` | The same, restructured for evaluation, for a local Jupyter kernel (full run by default; `DECISION_LOG.md` 9.12) |
 | `P14_Shopping_Assistant_Colab.ipynb` | The same for a free Colab T4 (quick run by default) |
-| `P14_Shopping_Assistant_Colab_Final.ipynb` | A completed quick run on a Colab T4, with its outputs (2026-10-30) |
+| `P14_Shopping_Assistant_Colab_Final.ipynb` | The notebook the team submits: the Colab notebook, rebuilt 2026-10-31 to run cleanly (9.17); the 30 Oct run is in git (`f66e728`) |
 | `Pickwise/config.py` | All settings (model, data sizes, seed, QUICK_RUN, RISKY_TOOLS) |
 | `Pickwise/data.py` | `load_queries`, `build_catalogue` (cached), `split_queries`, `check_no_leakage` |
 | `Pickwise/llm.py` | `get_llm(model, reasoning)`, `reasoning_trace(msg)` |
@@ -325,7 +325,7 @@ Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (9.1–9.13).
 - [x] Fresh clone, empty data folder, quick mode: **14.5 min** cold on our GPU (9.4 warm); **CPU-only 2 h 29 min** (24-core desktop); no errors in either.
 - [x] Colab fixes from the team's runs: GPU memory (9.8), system RAM (9.9), MCP server start-up (9.10: opens its port at once, loads the models in the background, start-up errors show the server log; re-ranker no longer reloaded on every search), Ollama start-up (9.11: own session, so a session restart no longer stops it; logged; restarted by the check cell).
 - [x] Clean notebooks for evaluation (9.12): `P14_Shopping_Assistant_Jupyter.ipynb` (local) and `P14_Shopping_Assistant_Colab.ipynb` (Colab); the experiment code is unchanged, the text follows the course template.
-- [x] **A real Colab T4 run completed** (team, 2026-10-30, quick mode, branch `phase-9-colab`): `P14_Shopping_Assistant_Colab_Final.ipynb`. It ran out of GPU memory in §7 and was slow in the re-ranking cells; the team finished it with a pasted fix, now in the code (9.13: float16 re-ranker in batches of 16 on GPUs without bfloat16). Time not recorded.
+- [x] **A real Colab T4 run completed** (team, 2026-10-30, quick mode, branch `phase-9-colab`): `P14_Shopping_Assistant_Colab_Final.ipynb`. It ran out of GPU memory in §7 and was slow in the re-ranking cells; the team finished it with a pasted fix, now in the code (9.13: float16 re-ranker in batches of 16 on GPUs without bfloat16). Time not recorded. That record re-ran badly (old branch, Drive restore, patch cell), so the file was rebuilt for submission (9.17); the record stays in git (`f66e728`).
 - [ ] **Team:** time one Colab run with 9.13 in the code (no extra cell needed).
 
 ## Findings / notes
