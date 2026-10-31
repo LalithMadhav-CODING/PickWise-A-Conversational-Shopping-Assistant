@@ -91,7 +91,7 @@ Retrieval on the fixed **800-query test subset** (one gold product per request, 
 Against the success target written down before these runs (`DECISION_LOG.md` 7.1):
 - **Hit@3 ≥ 0.40: missed narrowly**, 0.380 with a 95% CI of [0.31, 0.45].
 - **Beat the single ReAct agent: not met.** It is ahead by 5.5 points, but the paired CI is [0.0, 10.5] (McNemar p = 0.07). It is also 11× faster.
-- **≥ 90% judged supported: missed.** 59% of recommendations are fully supported, and 91% are supported or partly. The quotes are verbatim (97%), but the sentence around a quote often states the shopper's wish as a product fact.
+- **≥ 90% judged supported: missed.** 59% of recommendations are fully supported, and 91% are supported or partly. The quotes are verbatim (97%), but the sentence around a quote often states the shopper's wish as a product fact. **30 blind human labels do not confirm the judge:** they agree on 43% (κ −0.15). The human rated 80% fully supported, the judge 57% of the same 30, so read 59% as a strict, rough estimate (notebook §6, `DECISION_LOG.md` 9.16).
 - **100% of executed adds approved: met.**
 
 Ablations: the re-ranker is the only part whose removal clearly hurts (−9.5 points Hit@3, CI [4.5, 14.5]). Rewriting, the comparator and MCP make no measurable difference to Hit@3. MCP adds about 0.03 s per turn. Memory on/off with 3 returning shoppers: avoided-brand and avoided-material picks fall from 2 and 3 to 0, and preferred-brand picks rise from 2 to 3.

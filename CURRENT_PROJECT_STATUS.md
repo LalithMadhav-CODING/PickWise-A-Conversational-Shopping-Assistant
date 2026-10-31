@@ -1,6 +1,6 @@
 # Current Project Status
 
-_Last updated: 2026-10-27_
+_Last updated: 2026-10-31_
 
 Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_Plan.md`; this file tracks progress against it.
 
@@ -310,10 +310,10 @@ Choices are in [`DECISION_LOG.md`](DECISION_LOG.md) (7.1–7.8), **written and p
 - [x] Notebook §6 / §7 / §9 cells written; §8 demo now also asks a one-product question (the remaining Phase 6 item).
 - [x] Background runs, one after another, 13:34–18:38: four system variants (≈ 13 min each), ReAct (2 h 34 min), judge (1 h 36 min). No errors.
 - [x] Full notebook re-run with the evaluation, error analysis and limitations; findings written.
-- [x] **Results vs the target:** Hit@3 0.380 [0.31, 0.45], missed narrowly · vs ReAct +5.5 [0.0, 10.5], not met · judged supported 0.59 (0.91 with partly), missed · approvals 100%, met. Full table in the README.
+- [x] **Results vs the target:** Hit@3 0.380 [0.31, 0.45], missed narrowly · vs ReAct +5.5 [0.0, 10.5], not met · judged supported 0.59 (0.91 with partly), missed; the human check agrees with the judge on 43% only · approvals 100%, met. Full table in the README.
 - [x] Found before the notebook ran: the error categories counted title-only products as "empty text" (86 instead of 1). Fixed; "title only" is now a separate flag (DECISION_LOG 7.10).
 - [x] Talk slides + `TALK_OUTLINE.md` with the final numbers.
-- [ ] **Team:** fill `evaluation/human_check_faithfulness.csv` (30 rows, blind to the judge).
+- [x] **Human check** (2026-10-31): `evaluation/human_check_faithfulness.csv` 30/30 labelled, blind to the judge. **The judge agrees with the human on 43% (κ −0.15)**; the human rated 80% fully supported, the judge 57% of the same 30 (stricter in 13 of 17 disagreements). Reported as is in §6 and §9 (DECISION_LOG 9.16).
 
 ## Phase 9 — Colab T4 / CPU ✅ (branch `phase-9-colab`)
 
@@ -352,3 +352,4 @@ See *Plan Review — Open Issues* in `P14_Project_Plan.md`. Resolved so far: #2 
 - 2026-10-27 — **Phase 7 pushed** (`20c2a2d`): results table, error analysis, limitations, talk outline. **Phase 9**: recorded LLM outputs replayed; fresh-clone runs verified on GPU (14.5 min) and CPU-only (2 h 29 min).
 - 2026-10-30 — **Colab fixes** for the team's runs: MCP server start-up (9.10), Ollama start-up (9.11). **Two clean notebooks for evaluation** (9.12). **A quick run completed on a free Colab T4**; its GPU-memory failure in §7 led to the T4 re-ranker fix (9.13). The repository is public now.
 - 2026-10-31 — **Checked against the brief:** every build and evaluation item is in the notebook. Fixed in all three notebooks (9.14): the recursion limit is now stated in §5b, §10 References is complete (models, papers, course labs), and a pandas warning is gone from the faithfulness cell. Team names added by the team. **All phases merged into `main`** (fast-forward, 9.15). Left for the team: the 30 human labels, the contributions column, timing a Colab run, rehearsal.
+- 2026-10-31 — **Human check done:** 30/30 labelled on the labelling page. The judge agrees with the human on 13 of 30 (43%, κ −0.15) and is the stricter one; notebook §6 findings and §9 updated, faithfulness cell shows the table (9.16). Left for the team: the contributions column, timing a Colab run, rehearsal.

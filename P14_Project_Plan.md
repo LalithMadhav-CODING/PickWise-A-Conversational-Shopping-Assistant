@@ -9,7 +9,7 @@
 > **Model** · qwen3:4b via Ollama (≤4B params, no paid APIs)
 
 > [!abstract] Where we are · updated 2026-10-31
-> Phases 0–7 done (✅ below) · Phase 8 web app ✅ · **Phase 9 ✅: a quick run completed on a free Colab T4** (2026-10-30, with the T4 re-ranker fix 9.13) · notebooks for evaluation: `P14_Shopping_Assistant_Jupyter.ipynb` (local) and `P14_Shopping_Assistant_Colab.ipynb` (completed run: `…_Colab_Final.ipynb`) · talk slides + outline ready (`TALK_OUTLINE.md`) · **checked against the brief and all phases merged into `main`** (2026-10-31, 9.14–9.15) · left for the team: the 30 human labels, the contributions column of the team table, time a Colab run, rehearse. Results vs the pre-registered target: Hit@3 0.380 (missed narrowly) · vs ReAct not significant · faithfulness 59% (missed) · approvals 100% (met). Live progress: `CURRENT_PROJECT_STATUS.md` · every choice made without the team: `DECISION_LOG.md`.
+> Phases 0–7 done (✅ below) · Phase 8 web app ✅ · **Phase 9 ✅: a quick run completed on a free Colab T4** (2026-10-30, with the T4 re-ranker fix 9.13) · notebooks for evaluation: `P14_Shopping_Assistant_Jupyter.ipynb` (local) and `P14_Shopping_Assistant_Colab.ipynb` (completed run: `…_Colab_Final.ipynb`) · talk slides + outline ready (`TALK_OUTLINE.md`) · **checked against the brief and all phases merged into `main`** (2026-10-31, 9.14–9.15) · **30 human labels done** (2026-10-31: the judge agrees with them on 43%, κ −0.15, 9.16) · left for the team: the contributions column of the team table, time a Colab run, rehearse. Results vs the pre-registered target: Hit@3 0.380 (missed narrowly) · vs ReAct not significant · faithfulness 59% (missed; not confirmed by the human check) · approvals 100% (met). Live progress: `CURRENT_PROJECT_STATUS.md` · every choice made without the team: `DECISION_LOG.md`.
 
 ---
 
@@ -219,7 +219,7 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
   - **full system** (MCP)
   - ablations: rewriting off (`build_system(rewrite=False)`) · re-ranker off (hybrid only) · MCP vs local tools (same answers, latency)
 - [x] Code: `Pickwise/judge.py` (judge + human sheet; calibrated on planted errors, 6/6), `evaluate.py` records each pick's reason and quote and each run's own query + 10 candidates, `rewrite` switch in `graph.py`; notebook §6 / §7 / §9 cells written
-- [x] **Faithfulness**: verbatim-quote check on every pick + an **LLM judge** (qwen3:4b, reasoning on; each product *supported / partly / unsupported*) on the first 100, system vs ReAct + a **blind 30-row sheet for human labels** (`evaluation/human_check_faithfulness.csv`, *team task*) → judge-vs-human agreement
+- [x] **Faithfulness**: verbatim-quote check on every pick + an **LLM judge** (qwen3:4b, reasoning on; each product *supported / partly / unsupported*) on the first 100, system vs ReAct + a **blind 30-row sheet for human labels** (`evaluation/human_check_faithfulness.csv`, *team task*) → judge-vs-human agreement: **43%, κ −0.15** (30/30 labelled 2026-10-31; 9.16)
 - [x] **Harness**: approval share from the audit log (must be 100%) + the adversarial cart test (Phase 5); latency MCP vs local
 - [x] **Memory on/off**: 3 returning shoppers (avoid a brand: Nike · avoid a material: leather · prefer a brand: Columbia); count violations / adherence, after checking the catalogue has products that can violate or match
 - [x] **Error analysis**: every miss classified (empty gold text · gold not in top 100 · ranked 11–100 · in top 10 but not picked · analyst misread) + ≥ 10 annotated examples
@@ -257,7 +257,7 @@ Each phase lists what it **builds on** (the lab code to adapt) and its **done-wh
 |---|---|---|---|
 | Retrieval | Recall@10, MRR, nDCG@10 vs. gold `item_id` | beat the best brief baseline, paired CI excludes 0 | ✅ met on test (800): 0.548 / 0.360 / 0.400 vs dense raw 0.409 / 0.248 |
 | End-to-end | Hit@3 (gold among 3 recommendations) | **≥ 0.40**, and beat single ReAct (paired CI excludes 0) | ❌ 0.380 [0.31, 0.45], narrowly missed · vs ReAct +5.5 [0.0, 10.5], not met |
-| Faithfulness | claims ∈ product text | **≥ 90%** judged supported; LLM judge + 30 human checks | ❌ 59% supported (91% with partly); quotes 97% verbatim; human checks ⏳ (team) |
+| Faithfulness | claims ∈ product text | **≥ 90%** judged supported; LLM judge + 30 human checks | ❌ 59% supported (91% with partly); quotes 97% verbatim; human check (30, blind): 80% supported, judge agreement 43% (κ −0.15) |
 | Harness | % cart via approval | **100%** | ✅ 100%; adversarial 8/8 paused |
 | Harness | latency per turn | MCP vs. local | ✅ 4.3 s vs 4.2 s per turn (MCP transport ≈ 0.03 s); ReAct 46.3 s |
 
@@ -324,7 +324,7 @@ All phase branches are merged into `main` (2026-10-31, a fast-forward to `phase-
 | Preference extractor (4B) puts items in the wrong field or invents them | Cue gating, grounding in the shopper's words, polarity and brand decided by code (5.2–5.4); avoided items filtered deterministically (6.6). Still misses double negatives (5.16) → Limitations |
 | End-to-end evaluation takes hours (ReAct ≈ 2.6 h, judge ≈ 1.7 h on 200 requests) | One 200-request subset, background runs, every answer cached in `data/runs/` |
 | A fresh notebook run takes hours, and Colab T4 / CPU is untested (a brief constraint) | Phase 9: `QUICK_RUN` shrinks the dev experiments, recorded comparisons loaded, timed Colab run. Team runs so far hit GPU memory, RAM and MCP and Ollama start-up problems, all fixed (9.8–9.11). The first complete Colab run (2026-10-30) then ran out of GPU memory in §7: fixed by 9.13 (float16 re-ranker on a T4) |
-| A 4B judge grading a 4B model may be lenient | 30 blind human checks by the team; judge–human agreement reported |
+| A 4B judge grading a 4B model may be lenient | 30 blind human checks by the team; judge–human agreement reported. **Checked (9.16):** the judge was stricter than the human, not more lenient, but agreed only at chance level (43%), so the faithfulness numbers are reported as estimates |
 | The catalogue has no prices, so a budget can't be checked | Budget is remembered and the reply says it can't be checked; in Limitations |
 | `ori_review` leaks into the index | Never read it into the index; assert in code |
 | Retrieval metrics look bad | **Happened on raw requests** (BM25 Recall@10 0.10; ~⅓ of gold items in no top 100). Mitigated by query rewriting (Recall@10 0.45) and then the BLaIR + Qwen3-Reranker upgrade (**test Recall@10 0.548, MRR 0.360**) |
@@ -355,7 +355,7 @@ Gaps found when checking this plan against the brief (`Project/P14_Shopping_Assi
 | 10 | **Milestones undated; team TBD** | Milestones now dated with status; team names in the notebooks (2026-10-31); **owners and the contributions column still TBD (team)** | — |
 | 11 | **No research question / success target** (required by the notebook template) | ✅ **Proposed 2026-10-27** — see *Project Goal*; fixed in notebook §1 before the Phase 7 test runs (7.1) | 7 |
 | 12 | **Dev split purpose unstated** | ✅ **Resolved 2026-10-26** — dev = tuning (RRF k, rerank shortlist size, prompts); test touched once | 1 / 7 |
-| 13 | **Faithfulness judging** — 30 human checks need an owner; qwen3:4b judging its own output may be biased | Judge built (`Pickwise/judge.py`); Phase 7 writes a blind 30-row sheet. **Owner for the human labels: team, TBD**; bias goes in Limitations | 7 |
+| 13 | **Faithfulness judging** — 30 human checks need an owner; qwen3:4b judging its own output may be biased | Judge built (`Pickwise/judge.py`); Phase 7 writes a blind 30-row sheet. ✅ **Resolved 2026-10-31:** one team member labelled all 30; agreement 43%, κ −0.15 (9.16); the low agreement is in §6 and Limitations | 7 |
 | 14 | **Catalogue build is slow** — streaming the 640 MB jsonl isn't reduced by QUICK_RUN | ✅ **Resolved 2026-10-26** — `data/catalogue.parquet`; re-runs load in < 1 s | 1 |
 | 15 | **Expectations** — Recall@10 on a ~30k-item catalogue will be well below 1.0 | Frame expected ranges in the talk so a modest Hit@3 isn't read as failure | talk |
 | 16 | **"Runs on free Colab T4 or laptop CPU" unverified** (audit 2026-10-27) — a fresh first run takes hours (reasoning check ≈ 100 min, model comparison, smoke tests) | ✅ **Resolved 2026-10-30** — fresh clone verified on GPU and CPU-only; a quick run completed on a free Colab T4 (9.10–9.13) | 9 |
@@ -372,7 +372,7 @@ Gaps found when checking this plan against the brief (`Project/P14_Shopping_Assi
 - [ ] All notebook sections present: ✅ all filled; team names in; **contributions column still empty (team)**
 - [x] Harness items all shown in the notebook: checkpointer + Store, `interrupt()` before `add_to_cart`, the recursion limit (stated in §5b since 2026-10-31), the printed trace
 - [x] §10 References: every model used, the papers behind each method, the course labs (2026-10-31)
-- [ ] 30 human faithfulness checks: the sheet is ready, **0/30 labelled (team)**
+- [x] 30 human faithfulness checks: 30/30 labelled (2026-10-31); judge agreement 43%, κ −0.15 (9.16)
 - [x] ≥ 10 failure cases in error analysis (all 124 misses categorised; annotated examples per category)
 - [x] `add_to_cart` 100% through approval (Phase 5: 100% approval share, adversarial 8/8 paused; re-checked in Phase 7)
 - [x] ≤ 4B params, no paid APIs (qwen3:4b · BLaIR 0.1B · Qwen3-Reranker 0.6B · all local)
