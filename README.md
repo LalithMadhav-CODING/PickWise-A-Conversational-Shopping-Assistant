@@ -138,7 +138,7 @@ Detailed progress, decisions and numbers: [`CURRENT_PROJECT_STATUS.md`](CURRENT_
 
 | Where | How | Time (quick run) |
 |---|---|---|
-| **Free Colab T4** | Upload `P14_Shopping_Assistant_Colab.ipynb` (*File → Upload notebook*), Runtime → T4 GPU, *Run all*. It clones this repository (`main`), installs the packages and Ollama, and pulls qwen3:4b itself. `P14_Shopping_Assistant_Colab_Final.ipynb` is the same notebook, the one we submit after a Colab run. | ≈ 40 min (estimated) |
+| **Free Colab T4** | Upload `P14_Shopping_Assistant_Colab.ipynb` (*File → Upload notebook*), Runtime → T4 GPU, *Run all*. It clones this repository (`main`), installs the packages and Ollama, and pulls qwen3:4b itself. `P14_Shopping_Assistant_Colab_Final.ipynb` is the same notebook with Google Drive save/restore cells, the one we submit after a Colab run. | ≈ 40 min (estimated) |
 | Laptop / workstation (GPU) | open `P14_Shopping_Assistant_Jupyter.ipynb` from the project folder on the project's kernel, or see below | 14.5 min cold, 9.4 min warm (RTX 4000 Ada) |
 | Laptop CPU only | see below; `PICKWISE_RETRIEVAL=dense` keeps searches fast | 2 h 29 min cold on a 24-core desktop CPU (mostly the Qwen3 re-ranker); longer on a typical laptop |
 
