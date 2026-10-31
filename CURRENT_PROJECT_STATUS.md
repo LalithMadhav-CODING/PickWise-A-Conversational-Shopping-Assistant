@@ -19,6 +19,8 @@ Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_P
 | 8 — Stretch Goals | 🟡 web app ✅ 2026-10-27 (branch `phase-8-app`), BLaIR ✅, LoRA ⚪ |
 | 9 — Colab T4 / CPU | ✅ 2026-10-27 (branch `phase-9-colab`): fresh clone runs on GPU (14.5 min) and CPU-only (2 h 29 min); **a quick run completed on a free Colab T4** (2026-10-30) |
 
+**All phases are merged into `main`** (2026-10-31); the phase branches stay for reference.
+
 **Milestone M1 (Data + Retrieval): ✅** catalogue built; 4 retrieval variants scored. **M2 (Need analyst): ✅** rewriting vs raw measured on test; reasoning mode confirmed on dev. **Stretch: BLaIR embedder ✅** (adopted, with Qwen3-Reranker).
 
 ## Files so far
@@ -349,3 +351,4 @@ See *Plan Review — Open Issues* in `P14_Project_Plan.md`. Resolved so far: #2 
 - 2026-10-27 — **Phase 6 pushed** (`c1372fe`). **Phase 8 web app built** (`app.py`, branch `phase-8-app`): 16/16 end-to-end checks.
 - 2026-10-27 — **Phase 7 pushed** (`20c2a2d`): results table, error analysis, limitations, talk outline. **Phase 9**: recorded LLM outputs replayed; fresh-clone runs verified on GPU (14.5 min) and CPU-only (2 h 29 min).
 - 2026-10-30 — **Colab fixes** for the team's runs: MCP server start-up (9.10), Ollama start-up (9.11). **Two clean notebooks for evaluation** (9.12). **A quick run completed on a free Colab T4**; its GPU-memory failure in §7 led to the T4 re-ranker fix (9.13). The repository is public now.
+- 2026-10-31 — **Checked against the brief:** every build and evaluation item is in the notebook. Fixed in all three notebooks (9.14): the recursion limit is now stated in §5b, §10 References is complete (models, papers, course labs), and a pandas warning is gone from the faithfulness cell. Team names added by the team. **All phases merged into `main`** (fast-forward, 9.15). Left for the team: the 30 human labels, the contributions column, timing a Colab run, rehearsal.

@@ -214,9 +214,15 @@ The course brief (`Project/`) and labs (`modules/`) are kept locally and are not
 
 | Member | Contribution |
 |---|---|
-| _TBD_ | _TBD_ |
+| A Lalith Madhav | _TBD_ |
+| Anusha T | _TBD_ |
+| Dhanvanth | _TBD_ |
 
 ## References
 
+The full list (models, papers, course labs) is in the notebook's §10.
+
 - Hou et al., 2024. *Bridging Language and Items for Retrieval and Recommendation* (Amazon-C4, BLaIR).
-- LangGraph, LangChain, Model Context Protocol, FAISS, rank-bm25, sentence-transformers, Hugging Face Datasets.
+- Models: qwen3:4b (Ollama), `hyp1231/blair-roberta-base`, `Qwen/Qwen3-Reranker-0.6B`; lab models `BAAI/bge-small-en-v1.5`, `cross-encoder/ms-marco-MiniLM-L-6-v2`.
+- Cormack et al., 2009 (reciprocal rank fusion); Robertson & Zaragoza, 2009 (BM25); Yao et al., 2023 (ReAct); Zheng et al., 2023 (LLM-as-a-judge).
+- LangGraph, LangChain, Model Context Protocol, FAISS, rank-bm25, sentence-transformers, Hugging Face Datasets, Gradio.

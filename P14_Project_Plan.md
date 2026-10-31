@@ -8,8 +8,8 @@
 > **Dataset** · McAuley-Lab/Amazon-C4 (Hugging Face, public)
 > **Model** · qwen3:4b via Ollama (≤4B params, no paid APIs)
 
-> [!abstract] Where we are · updated 2026-10-30
-> Phases 0–7 done (✅ below) · Phase 8 web app ✅ · **Phase 9 ✅: a quick run completed on a free Colab T4** (2026-10-30, with the T4 re-ranker fix 9.13) · notebooks for evaluation: `P14_Shopping_Assistant_Jupyter.ipynb` (local) and `P14_Shopping_Assistant_Colab.ipynb` (completed run: `…_Colab_Final.ipynb`) · talk slides + outline ready (`TALK_OUTLINE.md`) · left for the team: merge the branches into `main`, the 30 human labels, the team table, time a Colab run, rehearse. Results vs the pre-registered target: Hit@3 0.380 (missed narrowly) · vs ReAct not significant · faithfulness 59% (missed) · approvals 100% (met). Live progress: `CURRENT_PROJECT_STATUS.md` · every choice made without the team: `DECISION_LOG.md`.
+> [!abstract] Where we are · updated 2026-10-31
+> Phases 0–7 done (✅ below) · Phase 8 web app ✅ · **Phase 9 ✅: a quick run completed on a free Colab T4** (2026-10-30, with the T4 re-ranker fix 9.13) · notebooks for evaluation: `P14_Shopping_Assistant_Jupyter.ipynb` (local) and `P14_Shopping_Assistant_Colab.ipynb` (completed run: `…_Colab_Final.ipynb`) · talk slides + outline ready (`TALK_OUTLINE.md`) · **checked against the brief and all phases merged into `main`** (2026-10-31, 9.14–9.15) · left for the team: the 30 human labels, the contributions column of the team table, time a Colab run, rehearse. Results vs the pre-registered target: Hit@3 0.380 (missed narrowly) · vs ReAct not significant · faithfulness 59% (missed) · approvals 100% (met). Live progress: `CURRENT_PROJECT_STATUS.md` · every choice made without the team: `DECISION_LOG.md`.
 
 ---
 
@@ -290,7 +290,9 @@ Title + Team + Contributions
 
 | Member | Contribution |
 |---|---|
-| _TBD_ | _TBD — fill in: data, RAG, agents, eval, demo, write-up_ |
+| A Lalith Madhav | _TBD — fill in: data, RAG, agents, eval, demo, write-up_ |
+| Anusha T | _TBD_ |
+| Dhanvanth | _TBD_ |
 
 > **Rule** · cite which lab each part of the notebook builds on.
 
@@ -308,7 +310,7 @@ Title + Team + Contributions
 | M6 — Demo + talk | clean demo; 10-min talk rehearsed | demo ✅ · slides + outline ✅ 2026-10-27 (`TALK_OUTLINE.md`) · rehearsal ⏳ (team) |
 | M7 — Colab T4 / CPU | fresh Colab run, timed | ✅ CPU-only 2026-10-27 · Colab T4 quick run completed 2026-10-30 (time not recorded) |
 
-Phase branches are not merged into `main` yet (the team's call).
+All phase branches are merged into `main` (2026-10-31, a fast-forward to `phase-9-colab`; `DECISION_LOG.md` 9.15). The phase branches stay for reference.
 
 ---
 
@@ -350,7 +352,7 @@ Gaps found when checking this plan against the brief (`Project/P14_Shopping_Assi
 | 7 | **No preference writer** — the Store holds preferences, but no node extracts/saves them; the memory ablation depends on it | ✅ **Resolved 2026-10-27 (Phase 5)** — see DECISION_LOG 5.2–5.4 | 5 |
 | 8 | **`think=True` API naming — verify** — `think` / `message.thinking` is the raw `ollama` client; `langchain_ollama.ChatOllama` likely uses `reasoning=True` → `additional_kwargs["reasoning_content"]` | ✅ **Resolved 2026-10-26** — confirmed `reasoning=True` / `reasoning_content`; structured output works both ways (see Phase 4 note) | 0 / 4 |
 | 9 | **Approval % not instrumented** | ✅ **Resolved 2026-10-27 (Phase 5)** — see DECISION_LOG 5.10 (the brief's approval % is now measured from the audit log; adversarial prompts in the notebook) | 5 / 7 |
-| 10 | **Milestones undated; team TBD** | Milestones now dated with status; **owners and the team table still TBD (team)** | — |
+| 10 | **Milestones undated; team TBD** | Milestones now dated with status; team names in the notebooks (2026-10-31); **owners and the contributions column still TBD (team)** | — |
 | 11 | **No research question / success target** (required by the notebook template) | ✅ **Proposed 2026-10-27** — see *Project Goal*; fixed in notebook §1 before the Phase 7 test runs (7.1) | 7 |
 | 12 | **Dev split purpose unstated** | ✅ **Resolved 2026-10-26** — dev = tuning (RRF k, rerank shortlist size, prompts); test touched once | 1 / 7 |
 | 13 | **Faithfulness judging** — 30 human checks need an owner; qwen3:4b judging its own output may be biased | Judge built (`Pickwise/judge.py`); Phase 7 writes a blind 30-row sheet. **Owner for the human labels: team, TBD**; bias goes in Limitations | 7 |
@@ -367,7 +369,10 @@ Gaps found when checking this plan against the brief (`Project/P14_Shopping_Assi
 - [x] Fixed seed + subset size stated
 - [x] `ori_review` never in the index (asserted in `check_no_leakage`)
 - [x] All required metrics reported (Recall@10, MRR, nDCG@10, Hit@3, faithfulness, approval %, latency MCP vs local)
-- [ ] All notebook sections present: ✅ all filled; **team table still empty (team)**
+- [ ] All notebook sections present: ✅ all filled; team names in; **contributions column still empty (team)**
+- [x] Harness items all shown in the notebook: checkpointer + Store, `interrupt()` before `add_to_cart`, the recursion limit (stated in §5b since 2026-10-31), the printed trace
+- [x] §10 References: every model used, the papers behind each method, the course labs (2026-10-31)
+- [ ] 30 human faithfulness checks: the sheet is ready, **0/30 labelled (team)**
 - [x] ≥ 10 failure cases in error analysis (all 124 misses categorised; annotated examples per category)
 - [x] `add_to_cart` 100% through approval (Phase 5: 100% approval share, adversarial 8/8 paused; re-checked in Phase 7)
 - [x] ≤ 4B params, no paid APIs (qwen3:4b · BLaIR 0.1B · Qwen3-Reranker 0.6B · all local)
