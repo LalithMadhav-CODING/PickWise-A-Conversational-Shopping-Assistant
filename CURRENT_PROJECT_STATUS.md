@@ -1,6 +1,6 @@
 # Current Project Status
 
-_Last updated: 2026-10-31_
+_Last updated: 2026-11-06_
 
 Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_Plan.md`; this file tracks progress against it.
 
@@ -16,7 +16,7 @@ Live log of where the Pickwise (P14) build stands. The plan is in `P14_Project_P
 | 5 — Memory + Human-in-the-Loop | ✅ done 2026-10-27 (branch `phase-5-memory-approval`) |
 | 6 — Demo Cell | ✅ done 2026-10-27 (branch `phase-6-demo`) |
 | 7 — Evaluation | ✅ done 2026-10-27 (branch `phase-7-evaluation`): target pre-registered (`b1a7130`) before the runs |
-| 8 — Stretch Goals | 🟡 web app ✅ 2026-10-27 (branch `phase-8-app`), BLaIR ✅, LoRA ⚪ |
+| 8 — Stretch Goals | 🟡 web app ✅ 2026-10-27 (branch `phase-8-app`), **deployed permanently from the team's GPU machine 2026-11-06 (decision 10.1)**, BLaIR ✅, LoRA ⚪ |
 | 9 — Colab T4 / CPU | ✅ 2026-10-27 (branch `phase-9-colab`): fresh clone runs on GPU (14.5 min) and CPU-only (2 h 29 min); **a quick run completed on a free Colab T4** (2026-10-30) |
 
 **All phases are merged into `main`** (2026-10-31); the phase branches stay for reference.

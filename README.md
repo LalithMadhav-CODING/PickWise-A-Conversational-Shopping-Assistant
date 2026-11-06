@@ -104,6 +104,17 @@ Error analysis: 100 of the 124 misses happen before the comparator. 57 were neve
 
 **Web app (Phase 8):** `.venv/bin/python app.py` opens Pickwise at http://127.0.0.1:7860 (`--share` adds a temporary public link). It runs the same graph as the notebook: chat on the left, the agent trace streaming step by step on the right, **Approve / Reject** buttons when a cart action pauses, what Pickwise remembers about you, your cart, the approval log, and a switch between MCP and local tools.
 
+**Permanent deployment:** `deploy/pickwise.service` keeps the app running on a machine with a GPU: it starts at boot and restarts after a crash. `--public` gives every browser session its own private shopper. To install it, and publish it with Tailscale Funnel:
+
+```bash
+cp deploy/pickwise.service ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now pickwise.service
+loginctl enable-linger "$USER"          # start at boot without a login
+tailscale funnel --bg 7870             # the public HTTPS link
+```
+
+It is only up while that machine is on and online. Conversations, preferences and carts are kept in memory, so a restart clears them. The app has no login: anyone with the link can use it. Logs: `journalctl --user -u pickwise -f`.
+
 All choices were made on the 200 dev queries; test was scored once. Details: notebook §4–5b and [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md).
 
 ## Evaluation plan
@@ -190,6 +201,7 @@ Pickwise/                      reusable code imported by the notebook, MCP serve
   memory.py                    long-term memory: shopper preferences in the LangGraph Store
   cart.py                      add_to_cart (only after approval) + audit log
 app.py                         the web app (Gradio): chat, live trace, approve / reject at the cart
+deploy/pickwise.service        keeps the web app running (systemd user service)
 recorded/                      recorded LLM outputs, replayed so the notebook runs on a T4 / CPU
 requirements.txt
 run_notebook.py                runs the notebook top to bottom with a live per-cell log

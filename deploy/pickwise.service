@@ -1,0 +1,19 @@
+# Keeps the Pickwise web app running: starts at boot (no login needed once `loginctl enable-linger` is set) and
+# restarts after a crash. Install: see README, "Permanent deployment".
+[Unit]
+Description=Pickwise web app (public)
+After=network-online.target ollama.service
+Wants=network-online.target ollama.service
+
+[Service]
+WorkingDirectory=%h/Projects/MCP-RAG-SHOPPPER
+# Its own MCP port, so a notebook run on the default port neither reuses nor collides with this server
+Environment=PICKWISE_MCP_PORT=8776
+Environment=HF_HUB_OFFLINE=1
+Environment=GRADIO_ANALYTICS_ENABLED=False
+ExecStart=%h/Projects/MCP-RAG-SHOPPPER/.venv/bin/python -u app.py --public --port 7870
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

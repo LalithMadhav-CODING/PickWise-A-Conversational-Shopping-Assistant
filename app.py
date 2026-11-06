@@ -3,6 +3,7 @@ tool call as it happens, and approve or reject each cart action with a button.
 
     .venv/bin/python app.py              # http://127.0.0.1:7860
     .venv/bin/python app.py --share      # also a temporary public link (e.g. from Colab)
+    .venv/bin/python app.py --public     # for strangers: every browser session is its own private shopper
 
 Builds on: Module 4 · Agentic_app (the lab's Streamlit app). Gradio is used here because it streams an async
 generator straight into the page, so the trace appears step by step. The app runs the SAME graph as the
@@ -10,6 +11,7 @@ notebook (Pickwise.graph.build_system): the same agents, MCP tools, memory and a
 evaluated. Conversations and shopper preferences are kept in memory for as long as the app runs.
 """
 import argparse
+import traceback
 import uuid
 
 import gradio as gr
@@ -18,11 +20,13 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command
 
-from Pickwise import cart, memory, shop
+from Pickwise import cart, memory, shop, tools
 from Pickwise.graph import build_system, new_turn, stream_turn, turn_config
 
 SAVER, STORE = InMemorySaver(), InMemoryStore()     # shared by both transports: switching keeps the memory
 GRAPHS = {}                                          # "mcp" / "local" -> compiled graph, built on first use
+PUBLIC = False                                       # --public: visitors can't pick a shopper name or see error text
+MAX_MESSAGE = 1000                                   # --public: longest message passed on to the model
 
 EXAMPLES = [
     "I'm vegan, so no leather please. I need a slim wallet that fits in my front pocket.",
@@ -39,8 +43,15 @@ async def graph_for(via: str):
     return GRAPHS[via]
 
 
-def new_session(shopper: str = "guest") -> dict:
+def new_session(shopper: str | None = None) -> dict:
+    if shopper is None:
+        shopper = f"guest-{uuid.uuid4().hex[:8]}" if PUBLIC else "guest"
     return {"thread": f"app-{uuid.uuid4().hex[:8]}", "shopper": shopper, "waiting": False}
+
+
+def who(typed: str, session: dict) -> str:
+    """The shopper for this request. In public mode it comes only from the server-side session, never the browser."""
+    return session["shopper"] if PUBLIC else (typed.strip() or "guest")
 
 
 def as_markdown(text: str) -> str:
@@ -54,12 +65,13 @@ def panels(shopper: str) -> tuple:
     items = pd.DataFrame(cart.CARTS.get(shopper, []), columns=["quantity", "title"]).rename(columns={"quantity": "qty"})
     audit = pd.DataFrame([a for a in cart.AUDIT if a["user"] == shopper],
                          columns=["time", "item_id", "decision", "executed", "approved"])
-    return f"**Remembered about {shopper}:** {prefs}", items, audit
+    return f"**Remembered about {'you' if PUBLIC else shopper}:** {prefs}", items, audit
 
 
 async def turn(text: str, shown: str, history: list, session: dict, shopper: str, via: str):
     """One step of the conversation, streamed: a new message, or the answer to a paused cart action."""
-    shopper = shopper.strip() or "guest"
+    session = session or new_session()
+    shopper = who(shopper, session)
     if shopper != session["shopper"]:                # another shopper: their own conversation and memory
         session, history = new_session(shopper), []
     graph = await graph_for(via)
@@ -81,7 +93,8 @@ async def turn(text: str, shown: str, history: list, session: dict, shopper: str
                 trace.append(item)
                 yield view(False)
     except Exception as e:                           # e.g. Ollama not running: say so instead of hanging
-        trace.append(f"  ⚠️ {type(e).__name__}: {e}")
+        traceback.print_exc()
+        trace.append(f"  ⚠️ {type(e).__name__}" + ("" if PUBLIC else f": {e}"))
         history[-1]["content"] = f"Sorry, something went wrong: {type(e).__name__}. See the trace."
         session["waiting"] = False
         yield view(False)
@@ -101,30 +114,31 @@ async def turn(text: str, shown: str, history: list, session: dict, shopper: str
 async def send(message: str, history: list, session: dict, shopper: str, via: str):
     if not message.strip():
         return
-    async for out in turn(message.strip(), message.strip(), history, session, shopper, via):
+    message = message.strip()[:MAX_MESSAGE] if PUBLIC else message.strip()
+    async for out in turn(message, message, history, session, shopper, via):
         yield out
 
 
 async def approve(history: list, session: dict, shopper: str, via: str):
-    if session["waiting"]:
+    if session and session["waiting"]:
         async for out in turn("approve", "✅ Approve", history, session, shopper, via):
             yield out
 
 
 async def reject(history: list, session: dict, shopper: str, via: str):
-    if session["waiting"]:
+    if session and session["waiting"]:
         async for out in turn("reject", "❌ Reject", history, session, shopper, via):
             yield out
 
 
-def restart(shopper: str):
+def restart(shopper: str, session: dict):
     """A new conversation with the same shopper: their remembered preferences and cart stay."""
-    shopper = shopper.strip() or "guest"
+    shopper = who(shopper, session or new_session())
     return ([], "", gr.update(visible=False), "", new_session(shopper), *panels(shopper), "")
 
 
-def forget(shopper: str):
-    shopper = shopper.strip() or "guest"
+def forget(shopper: str, session: dict):
+    shopper = who(shopper, session or new_session())
     STORE.delete((memory.NAMESPACE, shopper), memory.KEY)
     return panels(shopper)
 
@@ -134,7 +148,7 @@ def build_ui(default_via: str = "mcp") -> gr.Blocks:
         gr.Markdown("# 🛒 Pickwise\nDescribe what you need in your own words. Pickwise searches the catalogue, "
                     "recommends 3 products with a reason quoted from each product's text, remembers your "
                     "preferences, and **never adds to your cart without your approval**.")
-        session = gr.State(new_session())
+        session = gr.State()                 # filled per visitor by demo.load below: a value given here is shared
         with gr.Row():
             with gr.Column(scale=3):
                 chat = gr.Chatbot(label="Conversation", height=520)
@@ -152,7 +166,7 @@ def build_ui(default_via: str = "mcp") -> gr.Blocks:
                 trace = gr.Code(label="Agent trace (this turn)", language=None, interactive=False, lines=16,
                                 wrap_lines=True)
                 with gr.Row():
-                    shopper = gr.Textbox(value="guest", label="Shopper", scale=2)
+                    shopper = gr.Textbox(value="guest", label="Shopper", scale=2, visible=not PUBLIC)
                     via = gr.Radio(["mcp", "local"], value=default_via, label="Tools via", scale=2)
                 first_prefs, first_cart, first_audit = panels("guest")
                 prefs = gr.Markdown(first_prefs)
@@ -168,12 +182,13 @@ def build_ui(default_via: str = "mcp") -> gr.Blocks:
             event(send, [box, chat, session, shopper, via], outputs)
         yes.click(approve, [chat, session, shopper, via], outputs)
         no.click(reject, [chat, session, shopper, via], outputs)
-        new_chat.click(restart, [shopper], outputs)
-        forget_me.click(forget, [shopper], [prefs, basket, audit])
+        new_chat.click(restart, [shopper, session], outputs)
+        forget_me.click(forget, [shopper, session], [prefs, basket, audit])
 
         async def warm():                    # build the graph (and MCP connection) when the page opens,
             await graph_for(default_via)     # so the first message isn't ~10 s slower than the rest
         demo.load(warm)
+        demo.load(new_session, None, session)
     return demo
 
 
@@ -182,7 +197,12 @@ if __name__ == "__main__":
     parser.add_argument("--share", action="store_true", help="also create a temporary public link")
     parser.add_argument("--port", type=int, default=7860)
     parser.add_argument("--via", choices=["mcp", "local"], default="mcp", help="default tool transport")
+    parser.add_argument("--public", action="store_true", help="open to strangers: private per-session shoppers")
     args = parser.parse_args()
+    PUBLIC = args.public
     print("Loading the catalogue and retrieval models…", flush=True)
     shop.warm_up()
-    build_ui(args.via).queue().launch(server_name="127.0.0.1", server_port=args.port, share=args.share)
+    if args.public and args.via == "mcp":
+        tools.ensure_server()                        # ready before the first visitor, not started by them
+    build_ui(args.via).queue(max_size=20 if args.public else None).launch(
+        server_name="127.0.0.1", server_port=args.port, share=args.share)
